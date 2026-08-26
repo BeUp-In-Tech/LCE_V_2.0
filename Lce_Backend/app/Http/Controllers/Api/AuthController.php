@@ -36,11 +36,11 @@ class AuthController extends Controller
             $user->email = $request->email;
             $user->first_name = $request->first_name;
             $user->last_name = $request->last_name;
-            $user->phone_1 = $request->phone;
-            $user->address_1 = $request->address;
-            $user->city = $request->city;
-            $user->state = $request->state;
-            $user->zip = $request->zip;
+            $user->phone_1 = $request->phone ?? '';
+            $user->address_1 = $request->address ?? '';
+            $user->city = $request->city ?? '';
+            $user->state = $request->state ?? '';
+            $user->zip = $request->zip ?? '';
             $user->country = 'US';
             $user->price_list_id = 1;
             $user->wash_fold_instructions = ' ';

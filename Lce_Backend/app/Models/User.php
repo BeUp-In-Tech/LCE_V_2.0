@@ -101,11 +101,11 @@ class User extends Authenticatable implements JWTSubject
 
         public function setPasswordAttribute($value)
     {
-        if (str_starts_with($value, '$2y$') || str_starts_with($value, '$2a$') || str_starts_with($value, '$2b$')) {
-            $this->attributes['password'] = $value;
-        } else {
-            $this->attributes['password'] = password_hash($value, PASSWORD_BCRYPT, ['cost' => 10]);
-        }
+        $hash = (str_starts_with($value, '$2y$') || str_starts_with($value, '$2a$') || str_starts_with($value, '$2b$'))
+            ? $value
+            : password_hash($value, PASSWORD_BCRYPT, ['cost' => 10]);
+
+        $this->attributes['password'] = $hash;
     }
 
         public function verifyPassword(string $plainPassword): bool
