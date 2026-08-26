@@ -20,7 +20,6 @@ interface ProfileFormData {
     city: string; 
     state: string;
     zipCode: string;
-    cellphone: string;
     landline: string;
 }
 

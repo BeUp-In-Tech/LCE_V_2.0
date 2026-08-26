@@ -116,7 +116,7 @@ const Dashboards = () => {
             if (recurringSchedule.schedule_type === 'weekly') {
                 type = 'weekly';
                 freq = 'Weekly';
-            } else if (recurringSchedule.schedule_type === 'bi_weekly' || recurringSchedule.schedule_type === 'bi-weekly') {
+            } else if (recurringSchedule.schedule_type === 'bi_weekly' || (recurringSchedule.schedule_type as string) === 'bi-weekly') {
                 type = 'weekly'; 
                 freq = 'biweekly';
             }

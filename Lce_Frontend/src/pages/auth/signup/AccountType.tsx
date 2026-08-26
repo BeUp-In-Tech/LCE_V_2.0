@@ -87,7 +87,7 @@ const AccountType: React.FC = () => {
                     password_confirmation: data.password,
                     first_name: data.firstName,
                     last_name: data.lastName,
-                    cell_phone: data.cellphone,
+                    phone: data.cellphone,
                 });
             }
 
@@ -372,7 +372,7 @@ const AccountType: React.FC = () => {
                                     </label>
                                     <Controller
                                         control={control}
-                                        name="phoneNumber"
+                                        name="cellphone"
                                         rules={{ required: true }}
                                         render={({ field: { onChange, name, value, ref } }) => (
                                             <PatternFormat
@@ -388,7 +388,7 @@ const AccountType: React.FC = () => {
                                             />
                                         )}
                                     />
-                                    {errors.phoneNumber && (
+                                    {errors.cellphone && (
                                         <p className="text-red-500 text-sm mt-1">Phone Number is required</p>
                                     )}
                                 </div>

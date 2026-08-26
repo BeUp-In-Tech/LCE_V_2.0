@@ -331,7 +331,7 @@ const SchedualModal: React.FC<ModalProps> = ({ isOpne, setIsOpen, selectedServic
                                 <Truck className="text-gray-500" size={18} />
                             )}
                             <span className="font-semibold text-gray-700">
-                                {service === 'weekly' ? (frequency === 'biweekly' ? 'Bi-weekly pickup' : 'Weekly pickup') : 'One time pickup'}
+                                {service === 'weekly' ? ((frequency as string) === 'biweekly' ? 'Bi-weekly pickup' : 'Weekly pickup') : 'One time pickup'}
                             </span>
                         </div>
                     </div>

@@ -169,7 +169,7 @@ const WashFold: React.FC<WashFoldProps> = ({ checked, onCheckedChange, onService
                             setIsOpen={setIsOpen}
                             subscription={activeSubscription}
                             onUpdated={() => {
-                                refresh();
+                                refreshSubscription();
                             }}
                         />}
                     </div>
@@ -269,7 +269,7 @@ const WashFold: React.FC<WashFoldProps> = ({ checked, onCheckedChange, onService
                             setIsOpen={setIsOpen}
                             currentPlanId={undefined}
                             currentBillingCycle={undefined}
-                            nextCronDate={activeSubscription?.next_cron_date}
+                            nextCronDate={(activeSubscription as any)?.next_cron_date}
                             onPlanChanged={(planDetails) => {
                                 if (planDetails.planId === 0) {
                                     setSelectedService('paygo');
