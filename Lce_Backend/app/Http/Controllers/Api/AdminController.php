@@ -33,20 +33,44 @@ class AdminController extends Controller
             return response()->json(['error' => 'Invalid email or password.'], 401);
         }
 
+        // Auto-fix user_id if NULL
+        if (isset($userInfo->id) && (empty($userInfo->user_id) || $userInfo->user_id === null)) {
+            DB::table('lce_user_info')
+                ->where('id', $userInfo->id)
+                ->update(['user_id' => $userInfo->id]);
+            $userInfo->user_id = $userInfo->id;
+        }
+
         // Check if user is admin (is_admin == 1)
         if (!isset($userInfo->is_admin) || (int)$userInfo->is_admin !== 1) {
             return response()->json(['error' => 'Access denied. Account is not registered as an Admin.'], 403);
         }
 
-        // Attempt JWT authentication via User model
-        $token = JWTAuth::attempt($credentials);
-        if (!$token) {
-            // Check legacy password match or bcrypt
-            $userModel = User::where('email', $request->email)->first();
-            if ($userModel && Hash::check($request->password, $userModel->password)) {
-                $token = JWTAuth::fromUser($userModel);
-            } else {
-                return response()->json(['error' => 'Invalid email or password.'], 401);
+        // Check password against lce_user_info directly
+        $passwordValid = false;
+        if (isset($userInfo->password) && Hash::check($request->password, $userInfo->password)) {
+            $passwordValid = true;
+        } elseif (isset($userInfo->password) && $request->password === $userInfo->password) {
+            $passwordValid = true;
+        }
+
+        if (!$passwordValid) {
+            return response()->json(['error' => 'Invalid email or password.'], 401);
+        }
+
+        // Generate JWT token from User model or userInfo ID
+        $userModel = User::where('email', $request->email)->first();
+        if (!$userModel && isset($userInfo->user_id)) {
+            $userModel = User::where('user_id', $userInfo->user_id)->first();
+        }
+
+        if ($userModel) {
+            $token = JWTAuth::fromUser($userModel);
+        } else {
+            // Fallback attempt
+            $token = JWTAuth::attempt($credentials);
+            if (!$token) {
+                return response()->json(['error' => 'Failed to generate access token.'], 500);
             }
         }
 
@@ -54,7 +78,7 @@ class AdminController extends Controller
             'status' => 'success',
             'token' => $token,
             'user' => [
-                'user_id' => $userInfo->user_id,
+                'user_id' => $userInfo->user_id ?? 1,
                 'email' => $userInfo->email,
                 'first_name' => $userInfo->first_name ?? '',
                 'last_name' => $userInfo->last_name ?? '',
@@ -63,17 +87,38 @@ class AdminController extends Controller
         ]);
     }
 
+
     /**
      * Get system aggregate statistics
      */
     public function getStats()
     {
         try {
-            $totalUsers = DB::table('lce_user_info')->count();
+            $totalUsers = Schema::hasTable('lce_user_info') ? DB::table('lce_user_info')->count() : 0;
             $totalPickups = Schema::hasTable('lce_user_pickup') ? DB::table('lce_user_pickup')->count() : 0;
-            $pendingPickups = Schema::hasTable('lce_user_pickup') ? DB::table('lce_user_pickup')->where('status', 'Scheduled')->count() : 0;
-            $activeSubscriptions = Schema::hasTable('lce_user_subscriptions') ? DB::table('lce_user_subscriptions')->where('status', 'Active')->count() : 0;
-            $totalRevenue = Schema::hasTable('lce_user_invoice') ? DB::table('lce_user_invoice')->sum('amount') : 0;
+
+            $pendingPickups = 0;
+            if (Schema::hasTable('lce_user_pickup') && Schema::hasColumn('lce_user_pickup', 'status')) {
+                $pendingPickups = DB::table('lce_user_pickup')->where('status', 'Scheduled')->count();
+            }
+
+            $activeSubscriptions = 0;
+            if (Schema::hasTable('lce_user_subscriptions') && Schema::hasColumn('lce_user_subscriptions', 'status')) {
+                $activeSubscriptions = DB::table('lce_user_subscriptions')->where('status', 'Active')->count();
+            }
+
+            $totalRevenue = 0;
+            if (Schema::hasTable('lce_user_invoice')) {
+                if (Schema::hasColumn('lce_user_invoice', 'amount')) {
+                    $totalRevenue = DB::table('lce_user_invoice')->sum('amount');
+                } elseif (Schema::hasColumn('lce_user_invoice', 'total')) {
+                    $totalRevenue = DB::table('lce_user_invoice')->sum('total');
+                } elseif (Schema::hasColumn('lce_user_invoice', 'total_amount')) {
+                    $totalRevenue = DB::table('lce_user_invoice')->sum('total_amount');
+                } elseif (Schema::hasColumn('lce_user_invoice', 'price')) {
+                    $totalRevenue = DB::table('lce_user_invoice')->sum('price');
+                }
+            }
 
             return response()->json([
                 'total_users' => $totalUsers,
@@ -86,6 +131,7 @@ class AdminController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
     /**
      * Get list of all database tables with row counts
@@ -164,7 +210,12 @@ class AdminController extends Controller
 
             // Search query filter
             $search = $request->query('search');
+            $userIdFilter = $request->query('user_id');
             $query = DB::table($tableName);
+
+            if ($userIdFilter && Schema::hasColumn($tableName, 'user_id')) {
+                $query->where('user_id', $userIdFilter);
+            }
 
             if ($search) {
                 $query->where(function ($q) use ($columns, $search) {
@@ -325,6 +376,103 @@ class AdminController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => "Pickup #{$id} status updated to {$request->status}."
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get comprehensive user details for Admin User Inspector
+     */
+    public function getUserDetails(Request $request, $userId)
+    {
+        try {
+            $user = DB::table('lce_user_info')->where('user_id', $userId)->first();
+            if (!$user) {
+                $user = DB::table('lce_user_info')->where('id', $userId)->first();
+            }
+
+            if (!$user) {
+                return response()->json(['error' => 'User not found.'], 404);
+            }
+
+            $actualUserId = $user->user_id ?? $user->id;
+
+            // Active subscription
+            $activeSubscription = DB::table('lce_user_subscriptions')
+                ->leftJoin('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
+                ->where('lce_user_subscriptions.user_id', $actualUserId)
+                ->whereIn('lce_user_subscriptions.status', ['active', 'cancelled_pending'])
+                ->select(
+                    'lce_user_subscriptions.*',
+                    'lce_subscription_plans.name as plan_name',
+                    'lce_subscription_plans.price_per_bag',
+                    'lce_subscription_plans.bags_per_month',
+                    'lce_subscription_plans.annual_discount'
+                )
+                ->first();
+
+            // Pending subscription (upgrade/downgrade)
+            $pendingSubscription = DB::table('lce_user_subscriptions')
+                ->leftJoin('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
+                ->where('lce_user_subscriptions.user_id', $actualUserId)
+                ->where('lce_user_subscriptions.status', 'pending')
+                ->select(
+                    'lce_user_subscriptions.*',
+                    'lce_subscription_plans.name as plan_name',
+                    'lce_subscription_plans.price_per_bag',
+                    'lce_subscription_plans.bags_per_month'
+                )
+                ->first();
+
+            // All subscription history
+            $subscriptions = DB::table('lce_user_subscriptions')
+                ->leftJoin('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
+                ->where('lce_user_subscriptions.user_id', $actualUserId)
+                ->select(
+                    'lce_user_subscriptions.*',
+                    'lce_subscription_plans.name as plan_name'
+                )
+                ->orderBy('lce_user_subscriptions.id', 'desc')
+                ->get();
+
+            // Orders (pickups)
+            $orders = DB::table('lce_user_pickup')
+                ->where('user_id', $actualUserId)
+                ->orderBy('id', 'desc')
+                ->get();
+
+            // Invoices
+            $invoices = DB::table('lce_user_invoice')
+                ->where('user_id', $actualUserId)
+                ->orderBy('id', 'desc')
+                ->get();
+
+            // Transactions
+            $transactions = DB::table('lce_user_transactions')
+                ->where('user_id', $actualUserId)
+                ->orderBy('id', 'desc')
+                ->get();
+
+            // Credits
+            $credits = [];
+            if (Schema::hasTable('lce_user_credits')) {
+                $credits = DB::table('lce_user_credits')->where('user_id', $actualUserId)->orderBy('id', 'desc')->get();
+            } elseif (Schema::hasTable('lce_credit')) {
+                $credits = DB::table('lce_credit')->where('user_id', $actualUserId)->orderBy('id', 'desc')->get();
+            }
+
+            return response()->json([
+                'user' => $user,
+                'user_id' => $actualUserId,
+                'active_subscription' => $activeSubscription,
+                'pending_subscription' => $pendingSubscription,
+                'subscriptions' => $subscriptions,
+                'orders' => $orders,
+                'invoices' => $invoices,
+                'transactions' => $transactions,
+                'credits' => $credits,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

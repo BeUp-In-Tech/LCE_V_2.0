@@ -46,7 +46,7 @@ export const DatabaseInspector: React.FC = () => {
   const fetchTableData = async (table: string, p = 1, q = search) => {
     setLoading(true);
     try {
-      const res = await adminService.getTableData(table, p, q);
+      const res = await adminService.getTableData(table, p, 25, q);
       setTableData(res);
     } catch (err: any) {
       console.error(err);
@@ -120,7 +120,7 @@ export const DatabaseInspector: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       {/* Header & Table Selection */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>

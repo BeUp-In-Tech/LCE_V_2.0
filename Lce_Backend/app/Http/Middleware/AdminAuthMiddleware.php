@@ -2,11 +2,11 @@
 
 namespace App\Http\Middleware;
 
-Closure;
-Illuminate\Http\Request;
-Illuminate\Support\Facades\DB;
-Illuminate\Support\Facades\Log;
-Tymon\JWTAuth\Facades\JWTAuth;
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AdminAuthMiddleware
 {
@@ -21,10 +21,22 @@ class AdminAuthMiddleware
                 return response()->json(['error' => 'Unauthenticated'], 401);
             }
 
+            $userId = $user->user_id ?? $user->id ?? null;
+
             // Check is_admin == 1 in lce_user_info
-            $userInfo = DB::table('lce_user_info')
-                ->where('user_id', $user->user_id)
-                ->first();
+            $userInfo = null;
+            if ($userId) {
+                $userInfo = DB::table('lce_user_info')
+                    ->where('user_id', $userId)
+                    ->orWhere('id', $userId)
+                    ->first();
+            }
+
+            if (!$userInfo && isset($user->email)) {
+                $userInfo = DB::table('lce_user_info')
+                    ->where('email', $user->email)
+                    ->first();
+            }
 
             $isAdmin = false;
             if ($userInfo) {

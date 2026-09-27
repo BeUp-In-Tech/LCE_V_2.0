@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
-const adminApi = axios.create({
+export const adminApi = axios.create({
   baseURL: `${API_BASE_URL}/admin`,
   headers: {
     'Content-Type': 'application/json',
@@ -96,10 +96,15 @@ export const adminService = {
     return res.data.tables || [];
   },
 
-  getTableData: async (tableName: string, page = 1, search = ''): Promise<TableDataResponse> => {
+  getTableData: async (tableName: string, page = 1, perPage = 25, search = ''): Promise<TableDataResponse> => {
     const res = await adminApi.get(`/tables/${tableName}`, {
-      params: { page, search },
+      params: { page, per_page: perPage, search },
     });
+    return res.data;
+  },
+
+  getUserDetails: async (userId: any) => {
+    const res = await adminApi.get(`/users/${userId}/details`);
     return res.data;
   },
 

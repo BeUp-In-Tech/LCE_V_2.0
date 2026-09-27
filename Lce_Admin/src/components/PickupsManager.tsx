@@ -13,7 +13,7 @@ export const PickupsManager: React.FC = () => {
   const fetchPickups = async (p = 1, q = search) => {
     setLoading(true);
     try {
-      const res = await adminService.getTableData('lce_user_pickup', p, q);
+      const res = await adminService.getTableData('lce_user_pickup', p, 25, q);
       setDataResponse(res);
     } catch (err: any) {
       console.error(err);
@@ -49,7 +49,7 @@ export const PickupsManager: React.FC = () => {
   const statuses = ['Scheduled', 'Driver En Route', 'Picked Up', 'Processing', 'Out for Delivery', 'Delivered', 'Cancelled'];
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Pickups & Orders Manager</h2>

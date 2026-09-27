@@ -185,9 +185,13 @@ Route::prefix('admin')->group(function () {
     Route::post('login', [AdminController::class, 'login']);
 
     Route::middleware([AdminAuthMiddleware::class])->group(function () {
+
+
+
         Route::get('stats', [AdminController::class, 'getStats']);
         Route::get('tables', [AdminController::class, 'getTables']);
         Route::get('tables/{tableName}', [AdminController::class, 'getTableData']);
+        Route::get('users/{userId}/details', [AdminController::class, 'getUserDetails']);
         Route::post('tables/{tableName}', [AdminController::class, 'createRecord']);
         Route::put('tables/{tableName}/{id}', [AdminController::class, 'updateRecord']);
         Route::delete('tables/{tableName}/{id}', [AdminController::class, 'deleteRecord']);

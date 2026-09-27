@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { adminService } from '../api/adminApi';
-import { Lock, Mail, Shield, AlertCircle } from 'lucide-react';
+import { Lock, Mail, Shield, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -9,6 +9,7 @@ interface LoginProps {
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,13 +67,21 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-10 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-200 transition focus:outline-none"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -84,10 +93,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {loading ? 'Authenticating...' : 'Sign In to Admin Panel'}
           </button>
         </form>
-
-        <div className="text-center pt-2 text-xs text-slate-500 border-t border-slate-800">
-          Strictly restricted to users with <code className="text-indigo-400 font-mono">is_admin = 1</code> permission.
-        </div>
       </div>
     </div>
   );
