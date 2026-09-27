@@ -29,11 +29,13 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
   const [search, setSearch] = useState<string>('');
 
   // Determine singular label
-  const singularLabel = title.endsWith('Codes')
+  const singularLabel = title === 'Invoices'
+    ? 'Invoice'
+    : title.endsWith('Codes')
     ? 'Promo Code'
     : title.endsWith('ies')
     ? title.slice(0, -3) + 'y'
-    : title.endsWith('es')
+    : title.endsWith('es') && !title.endsWith('Prices')
     ? title.slice(0, -2)
     : title.endsWith('s')
     ? title.slice(0, -1)
@@ -90,8 +92,34 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
         targetSortCol || '',
         targetSortDir
       );
+
+      let fetchedColumns = res.columns || [];
+      if (tableName === 'lce_user_invoice') {
+        const priority = [
+          'number',
+          'cdate',
+          'user_id',
+          'order_type',
+          'total',
+          'status',
+          'subscription_id',
+          'is_subscription_invoice',
+          'sub_total',
+          'pickup_charge',
+          'id'
+        ];
+        fetchedColumns = [...fetchedColumns].sort((a, b) => {
+          const idxA = priority.indexOf(a.name);
+          const idxB = priority.indexOf(b.name);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return 0;
+        });
+      }
+
       setData(res.data || []);
-      setColumns(res.columns || []);
+      setColumns(fetchedColumns);
       setPrimaryKey(res.primary_key || 'id');
       setTotal(res.total || 0);
       setPage(res.page || 1);
@@ -494,10 +522,77 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                           );
                         }
 
-                        if (col.name === 'name') {
+                        // --- Special Formatting for Invoices ---
+                        if (tableName === 'lce_user_invoice' && col.name === 'status') {
+                          const s = String(val || '').toLowerCase();
+                          const isPaid = s === 'paid';
+                          const isPending = s === 'pending';
                           return (
-                            <td key={col.name} className="py-3.5 px-4 font-medium text-slate-900">
-                              {val || '-'}
+                            <td key={col.name} className="py-3.5 px-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                                  isPaid
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : isPending
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}
+                              >
+                                {val || 'Unknown'}
+                              </span>
+                            </td>
+                          );
+                        }
+
+                        if (tableName === 'lce_user_invoice' && col.name === 'order_type') {
+                          const isSub = String(val || '').toLowerCase() === 'subscription';
+                          return (
+                            <td key={col.name} className="py-3.5 px-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                                  isSub
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}
+                              >
+                                {isSub ? 'Subscription' : 'Pay As You Go'}
+                              </span>
+                            </td>
+                          );
+                        }
+
+                        if (
+                          tableName === 'lce_user_invoice' &&
+                          (col.name === 'total' || col.name === 'sub_total' || col.name === 'pickup_charge')
+                        ) {
+                          const num = Number(val || 0);
+                          return (
+                            <td
+                              key={col.name}
+                              className={`py-3.5 px-4 whitespace-nowrap font-mono ${
+                                col.name === 'total' ? 'font-bold text-slate-900 text-sm' : 'text-xs text-slate-600'
+                              }`}
+                            >
+                              ${num.toFixed(2)}
+                            </td>
+                          );
+                        }
+
+                        if (tableName === 'lce_user_invoice' && col.name === 'number') {
+                          return (
+                            <td key={col.name} className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-xs text-indigo-700">
+                              #{val}
+                            </td>
+                          );
+                        }
+
+                        if (col.name === 'cdate') {
+                          return (
+                            <td key={col.name} className="py-3.5 px-4 font-mono text-xs whitespace-nowrap text-slate-700">
+                              <span className="inline-flex items-center space-x-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                <span>{val ? String(val).slice(0, 16) : '-'}</span>
+                              </span>
                             </td>
                           );
                         }
@@ -638,6 +733,25 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                           <option value="subscription">Subscription (subscription)</option>
                           <option value="credit">Store Credit (credit)</option>
                           <option value="refund">Refund (refund)</option>
+                        </select>
+                      ) : tableName === 'lce_user_invoice' && col.name === 'status' ? (
+                        <select
+                          value={formData[col.name] ?? 'Paid'}
+                          onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="Paid">Paid</option>
+                          <option value="pending">Pending</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      ) : tableName === 'lce_user_invoice' && col.name === 'order_type' ? (
+                        <select
+                          value={formData[col.name] ?? 'subscription'}
+                          onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="subscription">Subscription</option>
+                          <option value="PPO">Pay As You Go (PPO)</option>
                         </select>
                       ) : col.name === 'publish' ? (
                         <select
