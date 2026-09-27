@@ -21,9 +21,11 @@ class SubscriptionController extends Controller
     {
         $user = $this->user();
 
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
+
         $subscriptions = DB::table('lce_user_subscriptions')
             ->join('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
-            ->where('lce_user_subscriptions.user_id', $user->user_id)
+            ->whereIn('lce_user_subscriptions.user_id', $userIds)
             ->select(
                 'lce_user_subscriptions.*',
                 'lce_subscription_plans.name as plan_name',
@@ -44,10 +46,12 @@ class SubscriptionController extends Controller
     {
         $user = $this->user();
 
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
+
         $subscription = DB::table('lce_user_subscriptions')
             ->join('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
             ->where('lce_user_subscriptions.id', $id)
-            ->where('lce_user_subscriptions.user_id', $user->user_id)
+            ->whereIn('lce_user_subscriptions.user_id', $userIds)
             ->select(
                 'lce_user_subscriptions.*',
                 'lce_subscription_plans.name as plan_name',
@@ -95,7 +99,7 @@ class SubscriptionController extends Controller
 
         try {
             $result = $this->subscriptionBilling->createSubscription(
-                $user->user_id,
+                (int) $user->id,
                 $request->plan_id,
                 $billingCycle
             );
@@ -150,9 +154,11 @@ class SubscriptionController extends Controller
         ]);
 
         
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
+
         $subscription = DB::table('lce_user_subscriptions')
             ->where('id', $id)
-            ->where('user_id', $user->user_id)
+            ->whereIn('user_id', $userIds)
             ->first();
 
         if (!$subscription) {
@@ -190,9 +196,11 @@ class SubscriptionController extends Controller
     {
         $user = $this->user();
 
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
+
         $subscription = DB::table('lce_user_subscriptions')
             ->where('id', $id)
-            ->where('user_id', $user->user_id)
+            ->whereIn('user_id', $userIds)
             ->first();
 
         if (!$subscription) {
@@ -225,9 +233,11 @@ class SubscriptionController extends Controller
     {
         $user = $this->user();
 
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
+
         $subscription = DB::table('lce_user_subscriptions')
             ->where('id', $id)
-            ->where('user_id', $user->user_id)
+            ->whereIn('user_id', $userIds)
             ->first();
 
         if (!$subscription) {
@@ -260,7 +270,19 @@ class SubscriptionController extends Controller
         $user = $this->user();
 
         try {
-            $result = $this->subscriptionBilling->cancelPendingChange($user->user_id);
+            $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
+            $result = null;
+            foreach ($userIds as $uid) {
+                try {
+                    $result = $this->subscriptionBilling->cancelPendingChange($uid);
+                    break;
+                } catch (\Exception $e) {
+                    // Try next ID if first fails
+                }
+            }
+            if (!$result) {
+                throw new \Exception('No pending subscription change found to cancel.');
+            }
 
             return response()->json([
                 'message' => $result['message'],

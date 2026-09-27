@@ -11,10 +11,11 @@ class InvoiceController extends Controller
         public function index(Request $request)
     {
         $user = $this->user();
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
 
         $query = DB::table('lce_user_invoice')
             ->leftJoin('lce_user_pickup', 'lce_user_invoice.id', '=', 'lce_user_pickup.invoice_id')
-            ->where('lce_user_invoice.user_id', $user->user_id)
+            ->whereIn('lce_user_invoice.user_id', $userIds)
             ->select(
                 'lce_user_invoice.*',
                 'lce_user_pickup.pickup_type',
@@ -61,6 +62,7 @@ class InvoiceController extends Controller
         public function show($id)
     {
         $user = $this->user();
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
 
         $invoice = DB::table('lce_user_invoice')
             ->select('lce_user_invoice.*')
@@ -73,7 +75,7 @@ class InvoiceController extends Controller
                     ->limit(1);
             }, 'billing_date')
             ->where('id', $id)
-            ->where('user_id', $user->user_id)
+            ->whereIn('user_id', $userIds)
             ->first();
 
         if (!$invoice) {
@@ -115,10 +117,11 @@ class InvoiceController extends Controller
         public function export(Request $request)
     {
         $user = $this->user();
+        $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
 
         $query = DB::table('lce_user_invoice')
             ->leftJoin('lce_user_pickup', 'lce_user_invoice.id', '=', 'lce_user_pickup.invoice_id')
-            ->where('lce_user_invoice.user_id', $user->user_id)
+            ->whereIn('lce_user_invoice.user_id', $userIds)
             ->select(
                 'lce_user_invoice.*',
                 'lce_user_pickup.pickup_type',

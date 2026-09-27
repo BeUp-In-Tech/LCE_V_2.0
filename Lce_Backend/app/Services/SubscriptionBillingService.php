@@ -35,8 +35,15 @@ class SubscriptionBillingService
 
         public function createSubscription(int $userId, int $planId, string $billingCycle = 'monthly'): array
     {
+        $userInfo = DB::table('lce_user_info')
+            ->where('id', $userId)
+            ->orWhere('user_id', $userId)
+            ->first(['id', 'user_id']);
+        $canonicalUserId = $userInfo ? (int) $userInfo->id : $userId;
+        $userIds = array_unique(array_filter([$userId, $canonicalUserId]));
+
         $existing = DB::table('lce_user_subscriptions')
-            ->where('user_id', $userId)
+            ->whereIn('user_id', $userIds)
             ->where('status', 'active')
             ->first();
 
@@ -69,7 +76,7 @@ class SubscriptionBillingService
             : $plan->bags_per_month;
 
         return DB::transaction(function () use (
-            $userId, $plan, $billingCycle, $startDate, $dates,
+            $canonicalUserId, $plan, $billingCycle, $startDate, $dates,
             $paymentAmount, $discountAmount, $bagsPlanPeriod, $bagsPlanTotal
         ) {
             
@@ -93,13 +100,14 @@ class SubscriptionBillingService
                 ];
             }
 
-            $invoice = $this->invoiceService->createInvoice($userId, $lineItems, [
+            $invoice = $this->invoiceService->createInvoice($canonicalUserId, $lineItems, [
                 'order_type' => 'subscription',
+                'is_subscription_invoice' => 1,
                 'use_credits' => true,
             ]);
 
             
-            $paymentResult = $this->chargeSubscription($userId, $invoice, $plan->name);
+            $paymentResult = $this->chargeSubscription($canonicalUserId, $invoice, $plan->name);
 
             if (!$paymentResult || empty($paymentResult['success'])) {
                 $errorMsg = $paymentResult['message'] ?? 'Payment failed. Please check your payment method.';
@@ -114,7 +122,7 @@ class SubscriptionBillingService
             $bagsAvailable = $plan->bags_per_month;
 
             $subscriptionId = DB::table('lce_user_subscriptions')->insertGetId([
-                'user_id' => $userId,
+                'user_id' => $canonicalUserId,
                 'plan_id' => $plan->id,
                 'status' => $status,
                 'billing_cycle' => $billingCycle,
@@ -140,9 +148,18 @@ class SubscriptionBillingService
                 'mdate' => now(),
             ]);
 
+            // Link the newly created subscription to the invoice
+            DB::table('lce_user_invoice')
+                ->where('id', $invoice->id)
+                ->update([
+                    'subscription_id' => $subscriptionId,
+                    'is_subscription_invoice' => 1,
+                    'mdate' => now(),
+                ]);
+
             Log::info('Subscription created', [
                 'subscription_id' => $subscriptionId,
-                'user_id' => $userId,
+                'user_id' => $canonicalUserId,
                 'plan' => $plan->name,
                 'status' => $status,
                 'amount' => $paymentAmount,
@@ -467,7 +484,11 @@ class SubscriptionBillingService
                     ];
                 }
 
-                $invoice = $this->invoiceService->createInvoice($pendingRow->user_id, $lineItems);
+                $invoice = $this->invoiceService->createInvoice($pendingRow->user_id, $lineItems, [
+                    'order_type' => 'subscription',
+                    'subscription_id' => $pendingRow->id,
+                    'is_subscription_invoice' => 1,
+                ]);
                 $paymentResult = $this->chargeSubscription($pendingRow->user_id, $invoice, $plan->name);
 
                 if ($paymentResult && $paymentResult['success']) {
@@ -608,7 +629,11 @@ class SubscriptionBillingService
                     ];
                 }
 
-                $invoice = $this->invoiceService->createInvoice($row->user_id, $lineItems);
+                $invoice = $this->invoiceService->createInvoice($row->user_id, $lineItems, [
+                    'order_type' => 'subscription',
+                    'subscription_id' => $row->id,
+                    'is_subscription_invoice' => 1,
+                ]);
                 $this->transactionService->logRefund(
                     $row->user_id,
                     $invoice->id,
@@ -683,7 +708,11 @@ class SubscriptionBillingService
                     ],
                 ];
 
-                $invoice = $this->invoiceService->createInvoice($subscription->user_id, $lineItems);
+                $invoice = $this->invoiceService->createInvoice($subscription->user_id, $lineItems, [
+                    'order_type' => 'subscription',
+                    'subscription_id' => $subscription->id,
+                    'is_subscription_invoice' => 1,
+                ]);
                 $paymentResult = $this->chargeSubscription($subscription->user_id, $invoice, $plan->name);
 
                 if (!$paymentResult || !$paymentResult['success']) {
@@ -813,6 +842,7 @@ class SubscriptionBillingService
                 $invoice = $this->invoiceService->createInvoice($pickup->user_id, $lineItems, [
                     'order_type' => 'subscription',
                     'subscription_id' => $subscription->id,
+                    'is_subscription_invoice' => 1,
                 ]);
                 $chargeResult = $this->chargeSubscription($pickup->user_id, $invoice, 'Subscription Overage');
 
@@ -881,7 +911,10 @@ class SubscriptionBillingService
 
         private function chargeSubscription(int $userId, object $invoice, string $planName): ?array
     {
-        $user = DB::table('lce_user_info')->where('user_id', $userId)->first();
+        $user = DB::table('lce_user_info')
+            ->where('id', $userId)
+            ->orWhere('user_id', $userId)
+            ->first();
 
         if (!$user || !$user->customerProfileId || !$user->customerPaymentProfileId) {
             return null;

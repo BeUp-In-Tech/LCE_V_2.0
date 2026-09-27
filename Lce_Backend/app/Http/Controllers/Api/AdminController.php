@@ -214,7 +214,16 @@ class AdminController extends Controller
             $query = DB::table($tableName);
 
             if ($userIdFilter && Schema::hasColumn($tableName, 'user_id')) {
-                $query->where('user_id', $userIdFilter);
+                $targetUser = DB::table('lce_user_info')
+                    ->where('id', $userIdFilter)
+                    ->orWhere('user_id', $userIdFilter)
+                    ->first(['id', 'user_id']);
+                if ($targetUser) {
+                    $uIds = array_unique(array_filter([(int) $targetUser->id, (int) $targetUser->user_id]));
+                    $query->whereIn('user_id', $uIds);
+                } else {
+                    $query->where('user_id', $userIdFilter);
+                }
             }
 
             if ($search) {
@@ -435,12 +444,13 @@ class AdminController extends Controller
                 return response()->json(['error' => 'User not found.'], 404);
             }
 
-            $actualUserId = $user->user_id ?? $user->id;
+            $actualUserId = $user->id;
+            $userIds = array_unique(array_filter([(int) $user->id, (int) $user->user_id]));
 
             // Active subscription
             $activeSubscription = DB::table('lce_user_subscriptions')
                 ->leftJoin('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
-                ->where('lce_user_subscriptions.user_id', $actualUserId)
+                ->whereIn('lce_user_subscriptions.user_id', $userIds)
                 ->whereIn('lce_user_subscriptions.status', ['active', 'cancelled_pending'])
                 ->select(
                     'lce_user_subscriptions.*',
@@ -454,7 +464,7 @@ class AdminController extends Controller
             // Pending subscription (upgrade/downgrade)
             $pendingSubscription = DB::table('lce_user_subscriptions')
                 ->leftJoin('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
-                ->where('lce_user_subscriptions.user_id', $actualUserId)
+                ->whereIn('lce_user_subscriptions.user_id', $userIds)
                 ->where('lce_user_subscriptions.status', 'pending')
                 ->select(
                     'lce_user_subscriptions.*',
@@ -467,7 +477,7 @@ class AdminController extends Controller
             // All subscription history
             $subscriptions = DB::table('lce_user_subscriptions')
                 ->leftJoin('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
-                ->where('lce_user_subscriptions.user_id', $actualUserId)
+                ->whereIn('lce_user_subscriptions.user_id', $userIds)
                 ->select(
                     'lce_user_subscriptions.*',
                     'lce_subscription_plans.name as plan_name'
@@ -477,28 +487,28 @@ class AdminController extends Controller
 
             // Orders (pickups)
             $orders = DB::table('lce_user_pickup')
-                ->where('user_id', $actualUserId)
+                ->whereIn('user_id', $userIds)
                 ->orderBy('id', 'desc')
                 ->get();
 
             // Invoices
             $invoices = DB::table('lce_user_invoice')
-                ->where('user_id', $actualUserId)
+                ->whereIn('user_id', $userIds)
                 ->orderBy('id', 'desc')
                 ->get();
 
             // Transactions
             $transactions = DB::table('lce_user_transactions')
-                ->where('user_id', $actualUserId)
+                ->whereIn('user_id', $userIds)
                 ->orderBy('id', 'desc')
                 ->get();
 
             // Credits
             $credits = [];
             if (Schema::hasTable('lce_user_credits')) {
-                $credits = DB::table('lce_user_credits')->where('user_id', $actualUserId)->orderBy('id', 'desc')->get();
+                $credits = DB::table('lce_user_credits')->whereIn('user_id', $userIds)->orderBy('id', 'desc')->get();
             } elseif (Schema::hasTable('lce_credit')) {
-                $credits = DB::table('lce_credit')->where('user_id', $actualUserId)->orderBy('id', 'desc')->get();
+                $credits = DB::table('lce_credit')->whereIn('user_id', $userIds)->orderBy('id', 'desc')->get();
             }
 
             return response()->json([

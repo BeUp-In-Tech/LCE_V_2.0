@@ -51,9 +51,20 @@ class InvoiceService
             $invoiceNumber = (DB::table('lce_user_invoice')->max('number') ?? 0) + 1;
 
             
+            // Resolve to canonical internal PK id if public 6-digit user_id was passed
+            $userInfo = DB::table('lce_user_info')
+                ->where('id', $userId)
+                ->orWhere('user_id', $userId)
+                ->first(['id', 'user_id']);
+            $canonicalUserId = $userInfo ? (int) $userInfo->id : $userId;
+
+            $isSubscription = !empty($options['subscription_id'])
+                || (isset($options['order_type']) && strtolower($options['order_type']) === 'subscription')
+                || !empty($options['is_subscription_invoice']);
+
             $invoiceId = DB::table('lce_user_invoice')->insertGetId([
                 'number' => $invoiceNumber,
-                'user_id' => $userId,
+                'user_id' => $canonicalUserId,
                 'status' => 'pending',
                 'sub_total_wf' => $subTotalWf,
                 'sub_total_dc' => $subTotalDc,
@@ -66,9 +77,9 @@ class InvoiceService
                 'group_admin_id' => $options['group_admin_id'] ?? 0,
                 'group_admin_discount_amount' => $options['group_discount'] ?? 0,
                 'partial_invoice' => $options['partial'] ?? 0,
-                'order_type' => $options['order_type'] ?? 'PPO',
+                'order_type' => $options['order_type'] ?? ($isSubscription ? 'subscription' : 'PPO'),
                 'subscription_id' => $options['subscription_id'] ?? null,
-                'is_subscription_invoice' => !empty($options['subscription_id']) ? 1 : 0,
+                'is_subscription_invoice' => $isSubscription ? 1 : 0,
                 'deleted' => 'No',
                 'cdate' => now(),
                 'mdate' => now(),
