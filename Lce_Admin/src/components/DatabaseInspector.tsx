@@ -1,10 +1,39 @@
 import React, { useEffect, useState } from 'react';
-import { adminService, TableItem, TableDataResponse, ColumnMeta } from '../api/adminApi';
-import { Database, Search, Plus, Edit, Trash2, AlertTriangle, CheckCircle, ArrowRight, ShieldAlert } from 'lucide-react';
+import { adminService, TableItem, TableDataResponse, SqlExecutionResponse } from '../api/adminApi';
+import {
+  Database,
+  Search,
+  Plus,
+  Edit,
+  Trash2,
+  AlertTriangle,
+  CheckCircle,
+  ShieldAlert,
+  Terminal,
+  Play,
+  RotateCcw,
+  Download,
+  Copy,
+  Check,
+  Clock,
+  Code2,
+  FileCode2
+} from 'lucide-react';
 
 export const DatabaseInspector: React.FC = () => {
+  // Mode selection: 'console' (SQL Query Editor) or 'browser' (Visual Table Inspector)
+  const [activeTab, setActiveTab] = useState<'console' | 'browser'>('console');
+
+  // --- SQL Console State ---
+  const [sqlQuery, setSqlQuery] = useState<string>('SELECT * FROM lce_prices ORDER BY id DESC LIMIT 50;');
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [queryResult, setQueryResult] = useState<SqlExecutionResponse | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // --- Table Inspector State ---
   const [tables, setTables] = useState<TableItem[]>([]);
-  const [selectedTable, setSelectedTable] = useState<string>('lce_user_info');
+  const [selectedTable, setSelectedTable] = useState<string>('lce_prices');
   const [tableData, setTableData] = useState<TableDataResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -16,8 +45,6 @@ export const DatabaseInspector: React.FC = () => {
   const [deleteRow, setDeleteRow] = useState<any | null>(null);
   const [deleteError, setDeleteError] = useState<{ message: string; suggestion?: string } | null>(null);
   const [message, setMessage] = useState('');
-
-  // Form State for Create/Edit
   const [formData, setFormData] = useState<Record<string, any>>({});
 
   useEffect(() => {
@@ -25,11 +52,11 @@ export const DatabaseInspector: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedTable) {
+    if (selectedTable && activeTab === 'browser') {
       setPage(1);
       fetchTableData(selectedTable, 1, search);
     }
-  }, [selectedTable]);
+  }, [selectedTable, activeTab]);
 
   const fetchTables = async () => {
     try {
@@ -55,6 +82,83 @@ export const DatabaseInspector: React.FC = () => {
     }
   };
 
+  // --- SQL Execution Handler ---
+  const handleExecuteSql = async (overrideSql?: string) => {
+    const q = (overrideSql ?? sqlQuery).trim();
+    if (!q) return;
+
+    setQueryLoading(true);
+    setQueryError(null);
+    setQueryResult(null);
+
+    try {
+      const res = await adminService.executeSql(q);
+      setQueryResult(res);
+      if (res.type === 'execute') {
+        fetchTables();
+      }
+    } catch (err: any) {
+      console.error(err);
+      setQueryError(err.response?.data?.error || err.message || 'Execution failed.');
+    } finally {
+      setQueryLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleExecuteSql();
+    }
+  };
+
+  const handleCopyQuery = () => {
+    navigator.clipboard.writeText(sqlQuery);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleExportCsv = () => {
+    if (!queryResult?.rows || queryResult.rows.length === 0) return;
+    const cols = queryResult.columns || Object.keys(queryResult.rows[0]);
+    const header = cols.join(',');
+    const rows = queryResult.rows.map((r: any) =>
+      cols
+        .map((c) => {
+          const val = r[c];
+          if (val === null || val === undefined) return '';
+          const str = String(val).replace(/"/g, '""');
+          return `"${str}"`;
+        })
+        .join(',')
+    );
+    const csvContent = 'data:text/csv;charset=utf-8,' + [header, ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `sql_results_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const PRESET_QUERIES = [
+    { label: 'All Prices (Limit 50)', sql: 'SELECT * FROM lce_prices ORDER BY id DESC LIMIT 50;' },
+    { label: 'Distinct Price Types', sql: 'SELECT DISTINCT type FROM lce_prices;' },
+    { label: 'Configurations Table', sql: 'SELECT * FROM lce_configurations ORDER BY id ASC;' },
+    { label: 'Show All Tables', sql: 'SHOW TABLES;' },
+    { label: 'Describe lce_prices', sql: 'DESCRIBE lce_prices;' },
+    {
+      label: 'Insert GNR Pricing (Template)',
+      sql: `-- Template to insert General (GNR) Fee records into lce_prices:
+INSERT INTO \`lce_prices\` (\`price_list_id\`, \`sku\`, \`price\`, \`type\`, \`status\`) VALUES
+(1, 'GNR_MIN', 20.00, 'GNR', 'active'),
+(1, 'GNR_PD', 3.99, 'GNR', 'active'),
+(1, 'GNR_SVC', 1.50, 'GNR', 'active');`
+    }
+  ];
+
+  // --- Table Inspector Handlers ---
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
@@ -121,151 +225,408 @@ export const DatabaseInspector: React.FC = () => {
 
   return (
     <div className="w-full space-y-6">
-      {/* Header & Table Selection */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      {/* Header & Mode Switcher */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-md">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center space-x-2">
-            <Database className="w-6 h-6 text-indigo-400" />
-            <span>Database Table Inspector & Relation Editor</span>
-          </h2>
-          <p className="text-slate-400 text-sm">Select any table in the database to inspect schema, edit fields, add rows, or force cascade delete.</p>
+          <div className="flex items-center space-x-3 mb-1">
+            <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl border border-indigo-500/30">
+              <Terminal className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Database & SQL Query Console</h2>
+              <p className="text-slate-400 text-sm">
+                Run raw SQL statements or visually browse, inspect and manage database tables.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <select
-              value={selectedTable}
-              onChange={(e) => setSelectedTable(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-semibold"
-            >
-              {tables.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {t.name} ({t.count} rows)
-                </option>
-              ))}
-            </select>
-          </div>
-
+        {/* View Mode Toggle */}
+        <div className="flex items-center bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 shadow-inner">
           <button
-            onClick={handleOpenCreate}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm flex items-center space-x-1.5 transition"
+            onClick={() => setActiveTab('console')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              activeTab === 'console'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
           >
-            <Plus className="w-4 h-4" />
-            <span>Add New Record</span>
+            <Code2 className="w-4 h-4" />
+            <span>SQL Query Console</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('browser');
+              if (!tableData && selectedTable) {
+                fetchTableData(selectedTable, 1);
+              }
+            }}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              activeTab === 'browser'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            <span>Table Inspector</span>
           </button>
         </div>
       </div>
 
-      {message && (
-        <div className="p-3 bg-emerald-900/40 border border-emerald-500/50 rounded-lg text-emerald-200 text-sm flex items-center space-x-2">
-          <CheckCircle className="w-4 h-4 text-emerald-400" />
-          <span>{message}</span>
-        </div>
-      )}
+      {/* ========================================================================= */}
+      {/* TAB 1: SQL QUERY CONSOLE */}
+      {/* ========================================================================= */}
+      {activeTab === 'console' && (
+        <div className="space-y-5 animate-fadeIn">
+          {/* Query Editor Box */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            {/* Editor Toolbar */}
+            <div className="bg-slate-950/80 px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center space-x-2">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">MySQL Console</span>
+                <span className="text-[11px] text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700/50">
+                  Ctrl + Enter to run
+                </span>
+              </div>
 
-      {/* Filter & Search Bar */}
-      <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-          <input
-            type="text"
-            placeholder={`Search across columns in ${selectedTable}...`}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-          />
-        </div>
-        <button type="submit" className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm transition">
-          Filter
-        </button>
-      </form>
-
-      {/* Data Table */}
-      {loading ? (
-        <div className="p-12 text-center text-slate-400">Loading table schema & data...</div>
-      ) : !tableData || tableData.data.length === 0 ? (
-        <div className="p-12 bg-slate-800/40 border border-slate-700/50 rounded-xl text-center text-slate-400">
-          No records found in table `{selectedTable}`.
-        </div>
-      ) : (
-        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto max-h-[600px]">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-900/90 text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-700">
-                <tr>
-                  <th className="px-3 py-3 text-center">Actions</th>
-                  {tableData.columns.map((col) => (
-                    <th key={col.name} className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center space-x-1">
-                        <span className={col.is_primary ? 'text-amber-400 font-bold' : ''}>{col.name}</span>
-                        <span className="text-[10px] text-slate-500 lowercase">({col.type})</span>
-                      </div>
-                    </th>
+              {/* Preset Queries Dropdown */}
+              <div className="flex items-center space-x-2">
+                <FileCode2 className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-xs text-slate-400">Presets:</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setSqlQuery(e.target.value);
+                    }
+                  }}
+                  defaultValue=""
+                  className="bg-slate-800 text-slate-200 text-xs border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="" disabled>Select query snippet...</option>
+                  {PRESET_QUERIES.map((p, i) => (
+                    <option key={i} value={p.sql}>
+                      {p.label}
+                    </option>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/50">
-                {tableData.data.map((row: any, idx: number) => {
-                  const pkVal = row[tableData.primary_key || 'id'];
-                  return (
-                    <tr key={pkVal ?? idx} className="hover:bg-slate-700/40 transition">
-                      <td className="px-3 py-2 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleOpenEdit(row)}
-                            className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded"
-                            title="Edit Record"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => { setDeleteRow(row); setDeleteError(null); }}
-                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded"
-                            title="Delete Record"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+                </select>
 
-                      {tableData.columns.map((col) => (
-                        <td key={col.name} className="px-4 py-2.5 max-w-xs truncate font-mono text-slate-200">
-                          {row[col.name] === null ? (
-                            <span className="text-slate-500 italic">NULL</span>
-                          ) : typeof row[col.name] === 'object' ? (
-                            JSON.stringify(row[col.name])
-                          ) : (
-                            String(row[col.name])
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                <button
+                  type="button"
+                  onClick={handleCopyQuery}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                  title="Copy SQL Query"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSqlQuery('')}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                  title="Clear Query"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
-          {/* Footer Pagination */}
-          <div className="p-4 bg-slate-900/60 border-t border-slate-700 flex items-center justify-between text-xs text-slate-400">
-            <span>Showing Page {tableData.page} of {tableData.last_page} ({tableData.total} Records)</span>
-            <div className="flex space-x-2">
+            {/* Code Input Area */}
+            <div className="p-4 bg-slate-900/90">
+              <textarea
+                value={sqlQuery}
+                onChange={(e) => setSqlQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={6}
+                spellCheck={false}
+                placeholder="Write your raw SQL query here... e.g. SELECT * FROM lce_prices WHERE type = 'GNR';"
+                className="w-full bg-slate-950 font-mono text-sm text-indigo-100 p-4 rounded-xl border border-slate-800 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/40 resize-y leading-relaxed selection:bg-indigo-600 selection:text-white"
+              />
+            </div>
+
+            {/* Action Bar */}
+            <div className="px-5 py-3 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between">
+              <p className="text-xs text-slate-500">
+                Supports <span className="text-indigo-400 font-mono">SELECT</span>, <span className="text-emerald-400 font-mono">INSERT</span>, <span className="text-amber-400 font-mono">UPDATE</span>, <span className="text-rose-400 font-mono">DELETE</span>, <span className="text-purple-400 font-mono">ALTER</span>, <span className="text-blue-400 font-mono">SHOW</span>.
+              </p>
+
               <button
-                disabled={page <= 1}
-                onClick={() => { setPage(page - 1); fetchTableData(selectedTable, page - 1, search); }}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded"
+                onClick={() => handleExecuteSql()}
+                disabled={queryLoading || !sqlQuery.trim()}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-xl text-sm flex items-center space-x-2 transition shadow-lg shadow-indigo-600/20 active:scale-95"
               >
-                Previous
-              </button>
-              <button
-                disabled={page >= tableData.last_page}
-                onClick={() => { setPage(page + 1); fetchTableData(selectedTable, page + 1, search); }}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded"
-              >
-                Next
+                {queryLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Executing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>Execute Query</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
+
+          {/* Error Message */}
+          {queryError && (
+            <div className="p-4 bg-rose-950/40 border border-rose-500/40 rounded-xl text-rose-200 text-sm flex items-start space-x-3 shadow-lg">
+              <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-semibold block text-rose-300">MySQL Execution Error</span>
+                <p className="font-mono text-xs bg-slate-950/60 p-2.5 rounded-lg border border-rose-900/50 break-all">
+                  {queryError}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Execution Result Area */}
+          {queryResult && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl space-y-0">
+              {/* Result Meta Bar */}
+              <div className="bg-slate-950 px-5 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-1.5 text-emerald-400 text-xs font-semibold">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Query OK</span>
+                  </div>
+                  {queryResult.duration_ms !== undefined && (
+                    <div className="flex items-center space-x-1 text-slate-400 text-xs font-mono">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{queryResult.duration_ms} ms</span>
+                    </div>
+                  )}
+                  {queryResult.count !== undefined && (
+                    <span className="text-xs text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-700/60 font-mono">
+                      {queryResult.count} {queryResult.count === 1 ? 'row' : 'rows'} returned
+                    </span>
+                  )}
+                  {queryResult.affected_rows !== undefined && (
+                    <span className="text-xs text-indigo-400 bg-indigo-950/60 px-2.5 py-0.5 rounded-full border border-indigo-700/40 font-mono">
+                      {queryResult.affected_rows} rows affected
+                    </span>
+                  )}
+                </div>
+
+                {queryResult.rows && queryResult.rows.length > 0 && (
+                  <button
+                    onClick={handleExportCsv}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg transition border border-slate-700"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Tabular Output (for SELECT) */}
+              {queryResult.type === 'select' && (
+                <div>
+                  {queryResult.rows && queryResult.rows.length > 0 ? (
+                    <div className="overflow-x-auto max-h-[550px] divide-y divide-slate-800">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950/90 text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800 backdrop-blur-md">
+                          <tr>
+                            <th className="px-3 py-3 w-12 text-center text-slate-600 font-mono">#</th>
+                            {queryResult.columns?.map((col) => (
+                              <th key={col} className="px-4 py-3 whitespace-nowrap font-mono text-indigo-300">
+                                {col}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 bg-slate-900/60">
+                          {queryResult.rows.map((row: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-indigo-950/20 transition">
+                              <td className="px-3 py-2.5 text-center text-slate-600 font-mono text-[11px]">
+                                {idx + 1}
+                              </td>
+                              {queryResult.columns?.map((col) => (
+                                <td key={col} className="px-4 py-2.5 max-w-sm truncate font-mono text-slate-200 text-xs">
+                                  {row[col] === null ? (
+                                    <span className="text-slate-500 italic">NULL</span>
+                                  ) : typeof row[col] === 'object' ? (
+                                    JSON.stringify(row[col])
+                                  ) : (
+                                    String(row[col])
+                                  )}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center text-slate-400 font-mono text-sm">
+                      Query returned 0 rows.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mutation / Execution Output (for INSERT/UPDATE/DELETE/ALTER) */}
+              {queryResult.type === 'execute' && (
+                <div className="p-6 bg-slate-900/40 text-center space-y-2">
+                  <div className="inline-flex p-3 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30">
+                    <CheckCircle className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-base font-bold text-white">{queryResult.message}</h4>
+                  <p className="text-xs text-slate-400">
+                    Execution took <span className="font-mono text-slate-300">{queryResult.duration_ms} ms</span>.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: VISUAL TABLE INSPECTOR */}
+      {/* ========================================================================= */}
+      {activeTab === 'browser' && (
+        <div className="space-y-5 animate-fadeIn">
+          {/* Table Selector & Search */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
+            <div className="flex items-center space-x-3">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Table:</label>
+              <select
+                value={selectedTable}
+                onChange={(e) => setSelectedTable(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-semibold"
+              >
+                {tables.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name} ({t.count} rows)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={handleOpenCreate}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm flex items-center justify-center space-x-1.5 transition font-semibold"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Record</span>
+            </button>
+          </div>
+
+          {message && (
+            <div className="p-3 bg-emerald-900/40 border border-emerald-500/50 rounded-lg text-emerald-200 text-sm flex items-center space-x-2">
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <span>{message}</span>
+            </div>
+          )}
+
+          {/* Filter & Search Bar */}
+          <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder={`Search across columns in ${selectedTable}...`}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <button type="submit" className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm transition">
+              Filter
+            </button>
+          </form>
+
+          {/* Data Table */}
+          {loading ? (
+            <div className="p-12 text-center text-slate-400">Loading table schema & data...</div>
+          ) : !tableData || tableData.data.length === 0 ? (
+            <div className="p-12 bg-slate-800/40 border border-slate-700/50 rounded-xl text-center text-slate-400">
+              No records found in table `{selectedTable}`.
+            </div>
+          ) : (
+            <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl overflow-hidden shadow-xl">
+              <div className="overflow-x-auto max-h-[600px]">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-900/90 text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-700">
+                    <tr>
+                      <th className="px-3 py-3 text-center">Actions</th>
+                      {tableData.columns.map((col) => (
+                        <th key={col.name} className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center space-x-1">
+                            <span className={col.is_primary ? 'text-amber-400 font-bold' : ''}>{col.name}</span>
+                            <span className="text-[10px] text-slate-500 lowercase">({col.type})</span>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {tableData.data.map((row: any, idx: number) => {
+                      const pkVal = row[tableData.primary_key || 'id'];
+                      return (
+                        <tr key={pkVal ?? idx} className="hover:bg-slate-700/40 transition">
+                          <td className="px-3 py-2 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center space-x-2">
+                              <button
+                                onClick={() => handleOpenEdit(row)}
+                                className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded"
+                                title="Edit Record"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => { setDeleteRow(row); setDeleteError(null); }}
+                                className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded"
+                                title="Delete Record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+
+                          {tableData.columns.map((col) => (
+                            <td key={col.name} className="px-4 py-2.5 max-w-xs truncate font-mono text-slate-200">
+                              {row[col.name] === null ? (
+                                <span className="text-slate-500 italic">NULL</span>
+                              ) : typeof row[col.name] === 'object' ? (
+                                JSON.stringify(row[col.name])
+                              ) : (
+                                String(row[col.name])
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer Pagination */}
+              <div className="p-4 bg-slate-900/60 border-t border-slate-700 flex items-center justify-between text-xs text-slate-400">
+                <span>Showing Page {tableData.page} of {tableData.last_page} ({tableData.total} Records)</span>
+                <div className="flex space-x-2">
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => { setPage(page - 1); fetchTableData(selectedTable, page - 1, search); }}
+                    className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={page >= tableData.last_page}
+                    onClick={() => { setPage(page + 1); fetchTableData(selectedTable, page + 1, search); }}
+                    className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -281,7 +642,7 @@ export const DatabaseInspector: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {tableData.columns.map((col) => {
                   const isPk = col.is_primary;
-                  if (isCreating && isPk) return null; // Skip PK on insert if auto-increment
+                  if (isCreating && isPk) return null;
 
                   return (
                     <div key={col.name} className="space-y-1">

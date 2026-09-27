@@ -189,6 +189,7 @@ Route::prefix('admin')->group(function () {
 
 
         Route::get('stats', [AdminController::class, 'getStats']);
+        Route::get('price-lists', [AdminController::class, 'getPriceLists']);
         Route::get('tables', [AdminController::class, 'getTables']);
         Route::get('tables/{tableName}', [AdminController::class, 'getTableData']);
         Route::get('users/{userId}/details', [AdminController::class, 'getUserDetails']);
@@ -196,6 +197,7 @@ Route::prefix('admin')->group(function () {
         Route::put('tables/{tableName}/{id}', [AdminController::class, 'updateRecord']);
         Route::delete('tables/{tableName}/{id}', [AdminController::class, 'deleteRecord']);
         Route::post('pickups/{id}/status', [AdminController::class, 'updatePickupStatus']);
+        Route::post('sql/execute', [AdminController::class, 'executeSql']);
     });
 });
 

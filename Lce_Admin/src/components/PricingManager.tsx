@@ -14,81 +14,100 @@ interface PriceItem {
 
 export const PricingManager: React.FC = () => {
   const [items, setItems] = useState<PriceItem[]>([]);
+  const [rawRows, setRawRows] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedList, setSelectedList] = useState<string>('00005 (#134)');
+  const [selectedList, setSelectedList] = useState<string>('Retail (#1)');
   const [selectedType, setSelectedType] = useState<string>('All Types');
   const [savingSku, setSavingSku] = useState<string | null>(null);
 
-  // Initial mock fallback items if backend table is empty
-  const defaultItems: PriceItem[] = [
-    { sku: 'G_MIN', type: 'GNR', name: 'GNR Minimum charge', price: '0.00' },
-    { sku: 'G_PD', type: 'GNR', name: 'GNR Pickup & Delivery', price: '0.00' },
-    { sku: 'G_SVC', type: 'GNR', name: 'GNR Service Fee', price: '0.00' },
-    { sku: 'WF15_20+', type: 'WF', name: 'Wash & Fold Laundry', price: '0.00' },
-    { sku: 'WF1_1+', type: 'WF', name: 'Wash & Fold Laundry', price: '999.99' },
-    { sku: 'WF16_1+', type: 'WF', name: 'Wash & Fold Laundry', price: '0.00' },
-    { sku: 'WF11_1+', type: 'WF', name: 'Wash & Fold Laundry', price: '0.00' },
-    { sku: 'WF16_20+', type: 'WF', name: 'Wash & Fold Laundry', price: '0.00' },
-    { sku: 'WF11_20+', type: 'WF', name: 'Wash & Fold Laundry', price: '0.00' },
-    { sku: 'WF17_1+', type: 'WF', name: 'Wash & Fold Laundry', price: '0.00' },
-  ];
+  // Dynamically populated from lce_prices table schema and rows
+  const [availableLists, setAvailableLists] = useState<{ key: string; label: string }[]>([
+    { key: 'price_1', label: 'Retail (#1)' },
+    { key: 'price_2', label: 'Wholesale (#2)' },
+    { key: 'price_134', label: '00005 (#134)' },
+  ]);
+  const [availableTypes, setAvailableTypes] = useState<string[]>([
+    'All Types', 'GNR', 'WF', 'WFU', 'WFS', 'DS', 'HD', 'DC'
+  ]);
 
-  const extractPriceAndKey = (row: any): { price: number | string; key: string } => {
-    // 1. Look for non-zero numeric price columns
-    const priorityKeys = ['price_134', 'price_1', 'price', 'amount', 'rate', 'unit_price', 'retail_price', 'price_retail', 'price_list_1'];
-    
-    for (const pKey of priorityKeys) {
-      if (row[pKey] !== undefined && row[pKey] !== null && row[pKey] !== '') {
-        const val = Number(row[pKey]);
-        if (!isNaN(val) && val > 0) {
-          return { price: row[pKey], key: pKey };
-        }
+  const getTargetColumnKey = (listName: string): string => {
+    const found = availableLists.find(l => l.label === listName);
+    if (found) return found.key;
+    if (listName.includes('#134')) return 'price_134';
+    if (listName.includes('#2')) return 'price_2';
+    if (listName.includes('#3')) return 'price_3';
+    return 'price_1';
+  };
+
+  const getPriceListLabel = (listName: string): string => {
+    const key = getTargetColumnKey(listName);
+    const num = key.replace('price_', '');
+    return `LIST #${num}`;
+  };
+
+  const mapRowsToItems = (rows: any[], listKey: string) => {
+    return rows.map((row: any) => {
+      let val = row[listKey];
+      if (val === undefined || val === null || val === '') {
+        val = row.price_1 !== undefined && row.price_1 !== null && row.price_1 !== '' ? row.price_1 : row.price;
       }
-    }
+      const numVal = Number(val);
+      const formattedPrice = !isNaN(numVal) ? numVal.toFixed(2) : (val ?? '0.00');
 
-    // 2. Scan all object keys for any non-zero price value
-    for (const key of Object.keys(row)) {
-      if (['id', 'sku', 'type', 'name', 'code', 'description', 'category', 'created_at', 'updated_at'].includes(key)) continue;
-      const val = Number(row[key]);
-      if (!isNaN(val) && val > 0) {
-        return { price: row[key], key };
-      }
-    }
-
-    // 3. Fallback to first available price property even if 0
-    for (const pKey of priorityKeys) {
-      if (row[pKey] !== undefined && row[pKey] !== null) {
-        return { price: row[pKey], key: pKey };
-      }
-    }
-
-    return { price: '0.00', key: 'price' };
+      return {
+        id: row.id,
+        sku: row.sku || row.code || `SKU_${row.id}`,
+        type: String(row.type || '').trim() || '-',
+        name: (row.name || row.description || 'Service Item').replace(/&amp;/g, '&'),
+        price: formattedPrice,
+        priceKey: listKey,
+        rawRow: row,
+      };
+    });
   };
 
   const fetchPricing = async () => {
     setLoading(true);
     try {
-      const res = await adminService.getTableData('lce_prices', 1, 100);
-      if (res.data && res.data.length > 0) {
-        const mapped = res.data.map((row: any) => {
-          const { price, key } = extractPriceAndKey(row);
-          return {
-            id: row.id,
-            sku: row.sku || row.code || row.item_code || `SKU_${row.id}`,
-            type: row.type || row.category || 'WF',
-            name: row.name || row.title || row.description || 'Service Item',
-            price: price,
-            priceKey: key,
-            rawRow: row,
-          };
-        });
-        setItems(mapped);
-      } else {
-        setItems(defaultItems);
+      const res = await adminService.getTableData('lce_prices', 1, 300);
+      if (res && res.data) {
+        setRawRows(res.data);
+
+        // Dynamically discover all price list columns from table schema
+        if (res.columns && res.columns.length > 0) {
+          const listCols = res.columns
+            .map((c: any) => c.name)
+            .filter((name: string) => /^price_\d+$/.test(name));
+
+          if (listCols.length > 0) {
+            const dynamicLists = listCols.map((colName: string) => {
+              const id = colName.replace('price_', '');
+              let label = `List #${id}`;
+              if (id === '1') label = 'Retail (#1)';
+              else if (id === '2') label = 'Wholesale (#2)';
+              else if (id === '134') label = '00005 (#134)';
+              return { key: colName, label };
+            });
+            setAvailableLists(dynamicLists);
+          }
+        }
+
+        // Dynamically discover all unique Types from table rows
+        if (res.data.length > 0) {
+          const uniqueTypes = Array.from(
+            new Set(res.data.map((d: any) => String(d.type || '').trim()).filter(Boolean))
+          ) as string[];
+          if (uniqueTypes.length > 0) {
+            setAvailableTypes(['All Types', ...uniqueTypes]);
+          }
+        }
+
+        const colKey = getTargetColumnKey(selectedList);
+        setItems(mapRowsToItems(res.data, colKey));
       }
-    } catch {
-      setItems(defaultItems);
+    } catch (err) {
+      console.error('Failed to fetch table data for lce_prices', err);
     } finally {
       setLoading(false);
     }
@@ -97,6 +116,14 @@ export const PricingManager: React.FC = () => {
   useEffect(() => {
     fetchPricing();
   }, []);
+
+  // When selectedList changes, re-map items with the new list key
+  useEffect(() => {
+    if (rawRows.length > 0) {
+      const colKey = getTargetColumnKey(selectedList);
+      setItems(mapRowsToItems(rawRows, colKey));
+    }
+  }, [selectedList]);
 
   const handlePriceChange = (sku: string, newPrice: string) => {
     setItems((prev) =>
@@ -109,11 +136,11 @@ export const PricingManager: React.FC = () => {
     setMessage(null);
     try {
       if (item.id) {
-        const updatePayload: Record<string, any> = {};
-        const targetKey = item.priceKey || 'price';
-        updatePayload[targetKey] = item.price;
-        // Also update standard 'price' column if available
-        updatePayload['price'] = item.price;
+        const targetKey = getTargetColumnKey(selectedList);
+        const updatePayload: Record<string, any> = {
+          [targetKey]: item.price,
+          price: item.price,
+        };
 
         await adminService.updateRecord('lce_prices', item.id, updatePayload);
       }
@@ -126,7 +153,7 @@ export const PricingManager: React.FC = () => {
   };
 
   const filteredItems = items.filter((item) => {
-    if (selectedType !== 'All Types' && item.type.toLowerCase() !== selectedType.toLowerCase()) {
+    if (selectedType !== 'All Types' && item.type.toUpperCase() !== selectedType.toUpperCase()) {
       return false;
     }
     return true;
@@ -159,9 +186,11 @@ export const PricingManager: React.FC = () => {
           onChange={(e) => setSelectedList(e.target.value)}
           className="border border-slate-300 text-slate-700 text-sm rounded-lg px-3.5 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
         >
-          <option value="00005 (#134)">00005 (#134)</option>
-          <option value="Retail (#1)">Retail (#1)</option>
-          <option value="Wholesale (#2)">Wholesale (#2)</option>
+          {availableLists.map((l) => (
+            <option key={l.key} value={l.label}>
+              {l.label}
+            </option>
+          ))}
         </select>
 
         <select
@@ -169,10 +198,11 @@ export const PricingManager: React.FC = () => {
           onChange={(e) => setSelectedType(e.target.value)}
           className="border border-slate-300 text-slate-700 text-sm rounded-lg px-3.5 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
         >
-          <option value="All Types">All Types</option>
-          <option value="GNR">GNR</option>
-          <option value="WF">WF</option>
-          <option value="DC">DC</option>
+          {availableTypes.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
         </select>
 
         <button
@@ -196,8 +226,8 @@ export const PricingManager: React.FC = () => {
                   <th className="py-3 px-4">SKU</th>
                   <th className="py-3 px-4">TYPE</th>
                   <th className="py-3 px-4">NAME</th>
-                  <th className="py-3 px-4">PRICE ({selectedList.includes('#134') ? 'LIST #134' : 'LIST #1'})</th>
-                  <th className="py-3 px-4 text-right">ACTION</th>
+                  <th className="py-3 px-4 font-semibold text-slate-500">PRICE ({getPriceListLabel(selectedList)})</th>
+                  <th className="py-3 px-4 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm text-slate-700">

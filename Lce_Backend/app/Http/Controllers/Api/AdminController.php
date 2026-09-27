@@ -227,11 +227,21 @@ class AdminController extends Controller
 
             // Pagination
             $page = max(1, (int)$request->query('page', 1));
-            $perPage = min(100, max(10, (int)$request->query('per_page', 25)));
+            $defaultPerPage = $tableName === 'lce_prices' ? 200 : 25;
+            $maxPerPage = $tableName === 'lce_prices' ? 500 : 100;
+            $perPage = min($maxPerPage, max(10, (int)$request->query('per_page', $defaultPerPage)));
 
             $total = $query->count();
-            $data = $query->orderBy($primaryKey, 'desc')
-                ->offset(($page - 1) * $perPage)
+            if ($tableName === 'lce_prices') {
+                if (Schema::hasColumn($tableName, 'order')) {
+                    $query->orderBy('order', 'asc');
+                }
+                $query->orderBy($primaryKey, 'asc');
+            } else {
+                $query->orderBy($primaryKey, 'desc');
+            }
+
+            $data = $query->offset(($page - 1) * $perPage)
                 ->limit($perPage)
                 ->get();
 
@@ -286,17 +296,45 @@ class AdminController extends Controller
             // Discover primary key
             $columnsRaw = DB::select("SHOW COLUMNS FROM `{$tableName}`");
             $primaryKey = 'id';
+            $validColumns = [];
             foreach ($columnsRaw as $col) {
+                $validColumns[$col->Field] = true;
                 if ($col->Key === 'PRI') {
                     $primaryKey = $col->Field;
-                    break;
                 }
             }
 
             $input = $request->except(['_token', $primaryKey]);
-            $updated = DB::table($tableName)
-                ->where($primaryKey, $id)
-                ->update($input);
+
+            // Table-specific column alias mapping for lce_user_info
+            if ($tableName === 'lce_user_info') {
+                if (isset($input['price_list']) && isset($validColumns['price_list_id'])) {
+                    $input['price_list_id'] = $input['price_list'];
+                }
+                if (isset($input['phone']) && isset($validColumns['phone_1'])) {
+                    $input['phone_1'] = $input['phone'];
+                }
+                if (isset($input['phone_secondary']) && isset($validColumns['phone_2'])) {
+                    $input['phone_2'] = $input['phone_secondary'];
+                }
+                if (isset($input['address']) && isset($validColumns['address_1'])) {
+                    $input['address_1'] = $input['address'];
+                }
+                if (isset($input['apt_unit']) && isset($validColumns['address_2'])) {
+                    $input['address_2'] = $input['apt_unit'];
+                }
+            }
+
+            // Only update columns that actually exist in the table to prevent SQL errors
+            $filteredInput = array_intersect_key($input, $validColumns);
+
+            if (!empty($filteredInput)) {
+                $updated = DB::table($tableName)
+                    ->where($primaryKey, $id)
+                    ->update($filteredInput);
+            } else {
+                $updated = 0;
+            }
 
             return response()->json([
                 'status' => 'success',
@@ -478,4 +516,230 @@ class AdminController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Get dynamic price lists from lce_prices
+     */
+    public function getPriceLists()
+    {
+        try {
+            $priceLists = [];
+            $seenKeys = [];
+
+            // 1. Check if lce_price_list or lce_price_lists table exists
+            if (Schema::hasTable('lce_price_list')) {
+                $rows = DB::table('lce_price_list')->get();
+                foreach ($rows as $r) {
+                    $val = (string)($r->id ?? $r->price_list_id ?? $r->code);
+                    $rate = (float)($r->rate ?? $r->price ?? $r->price_per_lb ?? 0);
+                    $label = $r->name ?? $r->title ?? $r->code ?? "Price List #{$val}";
+                    if ($rate > 0 && !str_contains($label, '$')) {
+                        $label .= ' - $' . number_format($rate, 2);
+                    }
+                    $priceLists[] = [
+                        'value' => $val,
+                        'label' => $label,
+                        'rate' => $rate,
+                        'sku' => $r->sku ?? "WF{$val}_1+",
+                        'order' => (int)$val,
+                    ];
+                    $seenKeys[$val] = true;
+                }
+            }
+
+            // 2. Fetch Wash & Fold pricing tiers from lce_prices
+            if (Schema::hasTable('lce_prices')) {
+                $wfItems = DB::table('lce_prices')
+                    ->where('deleted', 'No')
+                    ->where(function ($q) {
+                        $q->where('type', 'WF')
+                          ->orWhere('sku', 'like', 'WF%');
+                    })
+                    ->get();
+
+                foreach ($wfItems as $item) {
+                    $sku = $item->sku;
+                    $listId = null;
+                    if (preg_match('/^WF(\d+)_/i', $sku, $m)) {
+                        $listId = $m[1];
+                    } elseif (preg_match('/(\d+)/', $sku, $m)) {
+                        $listId = $m[1];
+                    }
+
+                    if ($listId !== null && !isset($seenKeys[(string)$listId])) {
+                        $priceCol = "price_{$listId}";
+                        $rate = 0.0;
+                        if (isset($item->$priceCol) && (float)$item->$priceCol > 0) {
+                            $rate = (float)$item->$priceCol;
+                        } elseif (isset($item->price_1) && (float)$item->price_1 > 0) {
+                            $rate = (float)$item->price_1;
+                        } elseif (isset($item->price) && (float)$item->price > 0) {
+                            $rate = (float)$item->price;
+                        }
+
+                        $label = "{$sku} - $" . number_format($rate, 2);
+
+                        $priceLists[] = [
+                            'value' => (string)$listId,
+                            'label' => $label,
+                            'rate' => $rate,
+                            'sku' => $sku,
+                            'order' => (int)$listId,
+                        ];
+                        $seenKeys[(string)$listId] = true;
+                    }
+                }
+
+                // Check for special price columns like price_134 (00005)
+                $columns = Schema::getColumnListing('lce_prices');
+                foreach ($columns as $col) {
+                    if (preg_match('/^price_(\d+)$/', $col, $m)) {
+                        $colListId = $m[1];
+                        if (!isset($seenKeys[(string)$colListId])) {
+                            $sample = DB::table('lce_prices')->where('deleted', 'No')->whereNotNull($col)->where($col, '>', 0)->first();
+                            $rate = $sample ? (float)$sample->$col : 0.0;
+                            $label = $colListId == '134' ? "00005 (#134)" : "List #{$colListId} - $" . number_format($rate, 2);
+                            $priceLists[] = [
+                                'value' => (string)$colListId,
+                                'label' => $label,
+                                'rate' => $rate,
+                                'sku' => "LIST_{$colListId}",
+                                'order' => (int)$colListId,
+                            ];
+                            $seenKeys[(string)$colListId] = true;
+                        }
+                    }
+                }
+            }
+
+            // Fallback if empty
+            if (empty($priceLists)) {
+                $priceLists = [
+                    ['value' => '1', 'label' => 'WF1_1+ - $3.09', 'rate' => 3.09, 'sku' => 'WF1_1+', 'order' => 1],
+                    ['value' => '2', 'label' => 'WF2_1+ - $1.99', 'rate' => 1.99, 'sku' => 'WF2_1+', 'order' => 2],
+                    ['value' => '3', 'label' => 'WF3_1+ - $2.79', 'rate' => 2.79, 'sku' => 'WF3_1+', 'order' => 3],
+                    ['value' => '4', 'label' => 'WF4_1+ - $2.29', 'rate' => 2.29, 'sku' => 'WF4_1+', 'order' => 4],
+                    ['value' => '5', 'label' => 'WF5_1+ - $2.19', 'rate' => 2.19, 'sku' => 'WF5_1+', 'order' => 5],
+                    ['value' => '6', 'label' => 'WF6_1+ - $2.09', 'rate' => 2.09, 'sku' => 'WF6_1+', 'order' => 6],
+                    ['value' => '7', 'label' => 'WF7_1+ - $2.39', 'rate' => 2.39, 'sku' => 'WF7_1+', 'order' => 7],
+                    ['value' => '8', 'label' => 'WF8_1+ - $2.49', 'rate' => 2.49, 'sku' => 'WF8_1+', 'order' => 8],
+                    ['value' => '9', 'label' => 'WF9_1+ - $2.59', 'rate' => 2.59, 'sku' => 'WF9_1+', 'order' => 9],
+                    ['value' => '10', 'label' => 'WF10_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF10_1+', 'order' => 10],
+                    ['value' => '11', 'label' => 'WF11_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF11_1+', 'order' => 11],
+                    ['value' => '12', 'label' => 'WF12_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF12_1+', 'order' => 12],
+                    ['value' => '13', 'label' => 'WF13_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF13_1+', 'order' => 13],
+                    ['value' => '134', 'label' => '00005 (#134)', 'rate' => 0.00, 'sku' => '00005', 'order' => 134],
+                ];
+            } else {
+                usort($priceLists, function ($a, $b) {
+                    $orderA = $a['order'] ?? (int)$a['value'];
+                    $orderB = $b['order'] ?? (int)$b['value'];
+                    return $orderA <=> $orderB;
+                });
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $priceLists,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'data' => [
+                    ['value' => '1', 'label' => 'WF1_1+ - $3.09', 'rate' => 3.09],
+                    ['value' => '2', 'label' => 'WF2_1+ - $1.99', 'rate' => 1.99],
+                    ['value' => '3', 'label' => 'WF3_1+ - $2.79', 'rate' => 2.79],
+                    ['value' => '4', 'label' => 'WF4_1+ - $2.29', 'rate' => 2.29],
+                    ['value' => '5', 'label' => 'WF5_1+ - $2.19', 'rate' => 2.19],
+                    ['value' => '6', 'label' => 'WF6_1+ - $2.09', 'rate' => 2.09],
+                    ['value' => '7', 'label' => 'WF7_1+ - $2.39', 'rate' => 2.39],
+                    ['value' => '8', 'label' => 'WF8_1+ - $2.49', 'rate' => 2.49],
+                    ['value' => '9', 'label' => 'WF9_1+ - $2.59', 'rate' => 2.59],
+                    ['value' => '10', 'label' => 'WF10_1+ - $2.99', 'rate' => 2.99],
+                    ['value' => '11', 'label' => 'WF11_1+ - $2.99', 'rate' => 2.99],
+                    ['value' => '12', 'label' => 'WF12_1+ - $2.99', 'rate' => 2.99],
+                    ['value' => '13', 'label' => 'WF13_1+ - $2.99', 'rate' => 2.99],
+                    ['value' => '134', 'label' => '00005 (#134)', 'rate' => 0.00],
+                ]
+            ]);
+        }
+    }
+
+    /**
+     * Execute arbitrary raw SQL query in admin panel
+     */
+    public function executeSql(Request $request)
+    {
+        $request->validate([
+            'sql' => 'required|string',
+        ]);
+
+        $rawSql = trim($request->input('sql'));
+
+        if (empty($rawSql)) {
+            return response()->json(['error' => 'SQL query cannot be empty.'], 400);
+        }
+
+        try {
+            $startTime = microtime(true);
+            $upper = strtoupper(ltrim($rawSql));
+
+            // Check if query is read-only / tabular
+            if (
+                str_starts_with($upper, 'SELECT') ||
+                str_starts_with($upper, 'SHOW') ||
+                str_starts_with($upper, 'DESC') ||
+                str_starts_with($upper, 'DESCRIBE') ||
+                str_starts_with($upper, 'EXPLAIN')
+            ) {
+                $results = DB::select($rawSql);
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+
+                $columns = [];
+                if (!empty($results)) {
+                    $first = (array)$results[0];
+                    $columns = array_keys($first);
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'type' => 'select',
+                    'columns' => $columns,
+                    'rows' => $results,
+                    'count' => count($results),
+                    'duration_ms' => $duration,
+                ]);
+            }
+
+            // Mutation or DDL query (INSERT, UPDATE, DELETE, ALTER, etc.)
+            // Split by semicolon if multiple statements
+            $statements = array_filter(
+                array_map('trim', explode(';', $rawSql)),
+                fn($stmt) => !empty($stmt)
+            );
+
+            $totalAffected = 0;
+            foreach ($statements as $stmt) {
+                $affected = DB::affectingStatement($stmt);
+                $totalAffected += $affected;
+            }
+
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+
+            return response()->json([
+                'status' => 'success',
+                'type' => 'execute',
+                'affected_rows' => $totalAffected,
+                'message' => "Query executed successfully ({$totalAffected} rows affected).",
+                'duration_ms' => $duration,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
 }
+

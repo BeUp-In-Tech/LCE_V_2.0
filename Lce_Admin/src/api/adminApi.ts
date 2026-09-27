@@ -96,6 +96,18 @@ export const adminService = {
     return res.data.tables || [];
   },
 
+  getPriceLists: async (): Promise<{ value: string; label: string; rate?: number; sku?: string }[]> => {
+    try {
+      const res = await adminApi.get('/price-lists');
+      if (res.data && res.data.data) {
+        return res.data.data;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
   getTableData: async (tableName: string, page = 1, perPage = 25, search = ''): Promise<TableDataResponse> => {
     const res = await adminApi.get(`/tables/${tableName}`, {
       params: { page, per_page: perPage, search },
@@ -129,4 +141,22 @@ export const adminService = {
     const res = await adminApi.post(`/pickups/${pickupId}/status`, { status });
     return res.data;
   },
+
+  executeSql: async (sql: string) => {
+    const res = await adminApi.post('/sql/execute', { sql });
+    return res.data;
+  },
 };
+
+export interface SqlExecutionResponse {
+  status: 'success' | 'error';
+  type?: 'select' | 'execute';
+  columns?: string[];
+  rows?: any[];
+  count?: number;
+  affected_rows?: number;
+  message?: string;
+  duration_ms?: number;
+  error?: string;
+}
+
