@@ -287,6 +287,43 @@ class AdminController extends Controller
                 }
             }
 
+            if ($tableName === 'lce_user_info') {
+                $userIds = [];
+                foreach ($data as $u) {
+                    if (!empty($u->id)) $userIds[] = (int) $u->id;
+                    if (!empty($u->user_id)) $userIds[] = (int) $u->user_id;
+                }
+                $userIds = array_unique(array_filter($userIds));
+
+                if (!empty($userIds)) {
+                    $activeSubs = DB::table('lce_user_subscriptions')
+                        ->leftJoin('lce_subscription_plans', 'lce_user_subscriptions.plan_id', '=', 'lce_subscription_plans.id')
+                        ->whereIn('lce_user_subscriptions.user_id', $userIds)
+                        ->where('lce_user_subscriptions.status', 'active')
+                        ->select(
+                            'lce_user_subscriptions.user_id',
+                            'lce_user_subscriptions.status as sub_status',
+                            'lce_user_subscriptions.billing_cycle as sub_cycle',
+                            'lce_subscription_plans.name as plan_name'
+                        )
+                        ->get()
+                        ->keyBy('user_id');
+
+                    foreach ($data as $item) {
+                        $matchedSub = $activeSubs->get($item->user_id) ?? $activeSubs->get($item->id);
+                        if ($matchedSub) {
+                            $item->subscription_status = 'Active';
+                            $item->subscription_plan = $matchedSub->plan_name ?: 'Active Subscription';
+                            $item->subscription_cycle = $matchedSub->sub_cycle ?: 'monthly';
+                        } else {
+                            $item->subscription_status = 'PPO';
+                            $item->subscription_plan = 'PPO';
+                            $item->subscription_cycle = null;
+                        }
+                    }
+                }
+            }
+
             return response()->json([
                 'table' => $tableName,
                 'primary_key' => $primaryKey,

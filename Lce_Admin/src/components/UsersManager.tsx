@@ -1156,7 +1156,7 @@ export const UsersManager: React.FC = () => {
 
                   <th className="py-3.5 px-4 whitespace-nowrap">PHONE</th>
                   <th className="py-3.5 px-4 whitespace-nowrap">CITY</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">CUSTOMER TYPE</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">SUBSCRIPTION</th>
 
                   <th
                     onClick={() => handleSort('cdate')}
@@ -1209,15 +1209,16 @@ export const UsersManager: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">{user.city || '-'}</td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-md ${
-                          user.customer_type === 'VIP'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : user.customer_type === 'Commercial'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-slate-100 text-slate-700 border border-slate-200'
-                        }`}>
-                          {user.customer_type || 'Regular'}
-                        </span>
+                        {user.subscription_status === 'Active' ? (
+                          <span className="inline-flex items-center space-x-1.5 text-xs font-semibold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span>{user.subscription_plan || 'Active Subscription'}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                            {user.subscription_plan || 'PPO'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 font-mono text-xs whitespace-nowrap">
                         <span className="inline-flex items-center space-x-1">
