@@ -263,6 +263,8 @@ class AdminController extends Controller
                     $query->orderBy('order', 'asc');
                 }
                 $query->orderBy($primaryKey, 'asc');
+            } elseif (in_array($tableName, ['lce_pickup_nonworking_days', 'lce_non_working_days'])) {
+                $query->orderBy('date', 'desc');
             } else {
                 $query->orderBy($primaryKey, 'desc');
             }
