@@ -273,6 +273,20 @@ class AdminController extends Controller
                 ->limit($perPage)
                 ->get();
 
+            if ($tableName === 'lce_user_subscriptions') {
+                $rawUserIds = $data->pluck('user_id')->filter()->unique()->toArray();
+                if (!empty($rawUserIds)) {
+                    $userMap = DB::table('lce_user_info')
+                        ->whereIn('id', $rawUserIds)
+                        ->pluck('user_id', 'id');
+                    foreach ($data as $item) {
+                        if (isset($item->user_id) && isset($userMap[$item->user_id])) {
+                            $item->user_id = $userMap[$item->user_id];
+                        }
+                    }
+                }
+            }
+
             return response()->json([
                 'table' => $tableName,
                 'primary_key' => $primaryKey,
@@ -316,6 +330,13 @@ class AdminController extends Controller
                     } else {
                         $input[$fieldName] = $col->Default !== null ? $col->Default : '';
                     }
+                }
+            }
+
+            if ($tableName === 'lce_user_subscriptions' && isset($input['user_id'])) {
+                $matchedUser = DB::table('lce_user_info')->where('id', $input['user_id'])->first();
+                if ($matchedUser && $matchedUser->user_id) {
+                    $input['user_id'] = $matchedUser->user_id;
                 }
             }
 
@@ -413,6 +434,13 @@ class AdminController extends Controller
                     if (str_starts_with($k, 'price') && !is_numeric($v)) {
                         $input[$k] = (float) preg_replace('/[^0-9.]/', '', (string) $v);
                     }
+                }
+            }
+
+            if ($tableName === 'lce_user_subscriptions' && isset($input['user_id'])) {
+                $matchedUser = DB::table('lce_user_info')->where('id', $input['user_id'])->first();
+                if ($matchedUser && $matchedUser->user_id) {
+                    $input['user_id'] = $matchedUser->user_id;
                 }
             }
 

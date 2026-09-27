@@ -125,6 +125,35 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
           if (idxB !== -1) return 1;
           return 0;
         });
+      } else if (tableName === 'lce_user_subscriptions') {
+        const priority = [
+          'id',
+          'user_id',
+          'plan_id',
+          'status',
+          'billing_cycle',
+          'bags_plan_balance',
+          'payment_last',
+          'start_date',
+          'next_renewal_date',
+          'bags_plan_total',
+          'bags_plan_used',
+          'bags_plan_period',
+          'payment_balance',
+          'payment_discount',
+          'created_via',
+          'next_cron_date',
+          'cdate',
+          'mdate'
+        ];
+        fetchedColumns = [...fetchedColumns].sort((a, b) => {
+          const idxA = priority.indexOf(a.name);
+          const idxB = priority.indexOf(b.name);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return 0;
+        });
       }
 
       setData(res.data || []);
@@ -224,6 +253,28 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
       initial['active'] = 1;
       initial['cdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
       initial['mdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    } else if (tableName === 'lce_user_subscriptions') {
+      const today = new Date();
+      const nextMonth = new Date();
+      nextMonth.setDate(today.getDate() + 30);
+      initial['user_id'] = '';
+      initial['plan_id'] = 1;
+      initial['status'] = 'active';
+      initial['billing_cycle'] = 'monthly';
+      initial['start_date'] = today.toISOString().split('T')[0];
+      initial['end_date'] = nextMonth.toISOString().split('T')[0];
+      initial['next_renewal_date'] = nextMonth.toISOString().split('T')[0];
+      initial['bags_plan_period'] = 1;
+      initial['bags_plan_total'] = 1;
+      initial['bags_plan_balance'] = 1;
+      initial['bags_plan_used'] = 0;
+      initial['bags_available'] = 1;
+      initial['created_via'] = 'web';
+      initial['payment_last'] = 70.00;
+      initial['payment_discount'] = 0.00;
+      initial['payment_balance'] = 0.00;
+      initial['cdate'] = today.toISOString().replace('T', ' ').slice(0, 19);
+      initial['mdate'] = today.toISOString().replace('T', ' ').slice(0, 19);
     }
 
     setFormData(initial);
@@ -607,6 +658,40 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                           );
                         }
 
+                        // --- Special Formatting for Subscriptions ---
+                        if ((tableName === 'lce_user_subscriptions' || tableName.includes('subscription')) && col.name === 'status') {
+                          const s = String(val || '').toLowerCase();
+                          let badgeClass = 'bg-slate-100 text-slate-600 border-slate-200';
+                          let dotClass = 'bg-slate-400';
+                          let label = val ? String(val).charAt(0).toUpperCase() + String(val).slice(1) : '-';
+
+                          if (s === 'active') {
+                            badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                            dotClass = 'bg-emerald-500';
+                          } else if (s === 'pending') {
+                            badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                            dotClass = 'bg-amber-500';
+                          } else if (s === 'cancelled') {
+                            badgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
+                            dotClass = 'bg-rose-500';
+                          } else if (s === 'paused') {
+                            badgeClass = 'bg-purple-50 text-purple-700 border-purple-200';
+                            dotClass = 'bg-purple-500';
+                          } else if (s === 'upgraded') {
+                            badgeClass = 'bg-blue-50 text-blue-700 border-blue-200';
+                            dotClass = 'bg-blue-500';
+                          }
+
+                          return (
+                            <td key={col.name} className="py-3.5 px-4 whitespace-nowrap">
+                              <span className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                                <span>{label}</span>
+                              </span>
+                            </td>
+                          );
+                        }
+
                         if (col.name === 'cdate') {
                           return (
                             <td key={col.name} className="py-3.5 px-4 font-mono text-xs whitespace-nowrap text-slate-700">
@@ -794,6 +879,28 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                           <option value="monthly">Monthly</option>
                           <option value="annual">Annual</option>
                         </select>
+                      ) : (tableName === 'lce_user_subscriptions' || tableName.includes('subscription')) && col.name === 'status' ? (
+                        <select
+                          value={formData[col.name] ?? 'active'}
+                          onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="active">Active</option>
+                          <option value="pending">Pending</option>
+                          <option value="paused">Paused</option>
+                          <option value="cancelled">Cancelled</option>
+                          <option value="upgraded">Upgraded</option>
+                        </select>
+                      ) : col.name === 'created_via' ? (
+                        <select
+                          value={formData[col.name] ?? 'web'}
+                          onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="web">Web</option>
+                          <option value="intra">Intra</option>
+                          <option value="other">Other</option>
+                        </select>
                       ) : col.name === 'promocode_for' ? (
                         <select
                           value={formData[col.name] ?? 'new_customers'}
@@ -812,10 +919,10 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                           onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
                           className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
-                      ) : col.name === 'date' || col.name === 'promo_expiry_date' || col.name === 'created_date' ? (
+                      ) : col.name === 'date' || col.name === 'promo_expiry_date' || col.name === 'created_date' || col.name === 'start_date' || col.name === 'end_date' || col.name === 'next_renewal_date' || col.name === 'next_cron_date' ? (
                         <input
                           type="date"
-                          required={col.name !== 'created_date'}
+                          required={col.name !== 'created_date' && col.name !== 'next_cron_date'}
                           value={formData[col.name] ?? ''}
                           onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
                           className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
