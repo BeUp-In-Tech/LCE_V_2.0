@@ -28,12 +28,12 @@ class PPOBillingService
         $this->authorizeNet = $authorizeNet;
     }
 
-        public function calculateCharges(float $weight, int $priceListId = 1, bool $includeFees = true): array
+    public function calculateCharges(float $weight, int $priceListId = 21, bool $includeFees = true): array
     {
-        $baseRate = $this->pricing->getWashFoldRate();
-        $minimum = $this->pricing->getMinimumCharge();
-        $pdFee = $this->pricing->getPickupDeliveryFee();
-        $serviceFee = $this->pricing->getServiceFee();
+        $baseRate = $this->pricing->getWashFoldRate($priceListId);
+        $minimum = $this->pricing->getMinimumCharge($priceListId);
+        $pdFee = $this->pricing->getPickupDeliveryFee($priceListId);
+        $serviceFee = $this->pricing->getServiceFee($priceListId);
 
         
         $laundryTotal = $weight * $baseRate;

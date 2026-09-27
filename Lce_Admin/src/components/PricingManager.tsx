@@ -74,23 +74,20 @@ export const PricingManager: React.FC = () => {
       if (res && res.data) {
         setRawRows(res.data);
 
-        // Dynamically discover all price list columns from table schema
-        if (res.columns && res.columns.length > 0) {
-          const listCols = res.columns
-            .map((c: any) => c.name)
-            .filter((name: string) => /^price_\d+$/.test(name));
-
-          if (listCols.length > 0) {
-            const dynamicLists = listCols.map((colName: string) => {
-              const id = colName.replace('price_', '');
-              let label = `List #${id}`;
-              if (id === '1') label = 'Retail (#1)';
-              else if (id === '2') label = 'Wholesale (#2)';
-              else if (id === '134') label = '00005 (#134)';
-              return { key: colName, label };
-            });
-            setAvailableLists(dynamicLists);
+        // Fetch only actual registered price lists from lce_prices_lists table
+        try {
+          const pLists = await adminService.getPriceLists();
+          if (pLists && pLists.length > 0) {
+            const mapped = pLists
+              .filter((l: any) => l.value !== '21')
+              .map((l: any) => ({
+                key: `price_${l.value}`,
+                label: l.label,
+              }));
+            setAvailableLists(mapped);
           }
+        } catch (e) {
+          console.error('Failed to fetch price lists', e);
         }
 
         // Dynamically discover all unique Types from table rows

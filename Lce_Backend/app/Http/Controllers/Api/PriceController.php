@@ -11,26 +11,29 @@ class PriceController extends Controller
         public function index(Request $request)
     {
         $user = $this->user();
+        $pricingService = app(\App\Services\PricingService::class);
 
-        
-        $priceListId = $user->price_list_id ?? 1;
+        $userZip = $user->zip ?? $request->query('zip');
+        $userPriceListId = $user->price_list_id ?? null;
+        $priceListId = \App\Services\PricingService::getPriceListIdForUser($userZip, $userPriceListId);
         $priceColumn = "price_{$priceListId}";
 
-        
+        if (!\Illuminate\Support\Facades\Schema::hasColumn('lce_prices', $priceColumn)) {
+            $priceColumn = 'price_1';
+        }
+
         $query = DB::table('lce_prices')
             ->where('deleted', 'No')
             ->orderBy('order')
             ->orderBy('type')
             ->orderBy('name');
 
-        
         if ($request->has('type')) {
             $query->where('type', $request->type);
         }
 
         $prices = $query->get();
 
-        
         $groupedPrices = $prices->groupBy('type')->map(function ($items, $type) use ($priceColumn) {
             return [
                 'type' => $type,
@@ -45,16 +48,13 @@ class PriceController extends Controller
             ];
         })->values();
 
-        
-        
-        $pricingService = app(\App\Services\PricingService::class);
-
         return response()->json([
             'price_list_id' => $priceListId,
             'categories' => $groupedPrices,
-            'base_rate' => $pricingService->getWashFoldRate(),
-            'pd_fee' => $pricingService->getPickupDeliveryFee(),
-            'service_fee' => $pricingService->getServiceFee(),
+            'base_rate' => $pricingService->getWashFoldRate($priceListId),
+            'pd_fee' => $pricingService->getPickupDeliveryFee($priceListId),
+            'service_fee' => $pricingService->getServiceFee($priceListId),
+            'min_charge' => $pricingService->getMinimumCharge($priceListId),
         ]);
     }
 

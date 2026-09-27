@@ -526,117 +526,65 @@ class AdminController extends Controller
             $priceLists = [];
             $seenKeys = [];
 
-            // 1. Check if lce_price_list or lce_price_lists table exists
-            if (Schema::hasTable('lce_price_list')) {
-                $rows = DB::table('lce_price_list')->get();
+            // 1. Fetch from database table lce_prices_lists
+            if (Schema::hasTable('lce_prices_lists')) {
+                $rows = DB::table('lce_prices_lists')->where('deleted', 'No')->get();
                 foreach ($rows as $r) {
-                    $val = (string)($r->id ?? $r->price_list_id ?? $r->code);
-                    $rate = (float)($r->rate ?? $r->price ?? $r->price_per_lb ?? 0);
-                    $label = $r->name ?? $r->title ?? $r->code ?? "Price List #{$val}";
-                    if ($rate > 0 && !str_contains($label, '$')) {
-                        $label .= ' - $' . number_format($rate, 2);
+                    $val = (string)$r->id;
+                    $name = $r->name;
+                    $label = "{$name} (#{$val})";
+
+                    $priceCol = "price_{$val}";
+                    $rate = 0.0;
+                    if (Schema::hasColumn('lce_prices', $priceCol)) {
+                        $sample = DB::table('lce_prices')
+                            ->where('deleted', 'No')
+                            ->where('type', 'WF')
+                            ->whereNotNull($priceCol)
+                            ->first();
+                        if ($sample) {
+                            $rate = (float)$sample->$priceCol;
+                        }
                     }
+
                     $priceLists[] = [
                         'value' => $val,
                         'label' => $label,
                         'rate' => $rate,
-                        'sku' => $r->sku ?? "WF{$val}_1+",
+                        'sku' => "WF{$val}_1+",
                         'order' => (int)$val,
                     ];
                     $seenKeys[$val] = true;
                 }
             }
 
-            // 2. Fetch Wash & Fold pricing tiers from lce_prices
-            if (Schema::hasTable('lce_prices')) {
-                $wfItems = DB::table('lce_prices')
-                    ->where('deleted', 'No')
-                    ->where(function ($q) {
-                        $q->where('type', 'WF')
-                          ->orWhere('sku', 'like', 'WF%');
-                    })
-                    ->get();
-
-                foreach ($wfItems as $item) {
-                    $sku = $item->sku;
-                    $listId = null;
-                    if (preg_match('/^WF(\d+)_/i', $sku, $m)) {
-                        $listId = $m[1];
-                    } elseif (preg_match('/(\d+)/', $sku, $m)) {
-                        $listId = $m[1];
-                    }
-
-                    if ($listId !== null && !isset($seenKeys[(string)$listId])) {
-                        $priceCol = "price_{$listId}";
-                        $rate = 0.0;
-                        if (isset($item->$priceCol) && (float)$item->$priceCol > 0) {
-                            $rate = (float)$item->$priceCol;
-                        } elseif (isset($item->price_1) && (float)$item->price_1 > 0) {
-                            $rate = (float)$item->price_1;
-                        } elseif (isset($item->price) && (float)$item->price > 0) {
-                            $rate = (float)$item->price;
-                        }
-
-                        $label = "{$sku} - $" . number_format($rate, 2);
-
-                        $priceLists[] = [
-                            'value' => (string)$listId,
-                            'label' => $label,
-                            'rate' => $rate,
-                            'sku' => $sku,
-                            'order' => (int)$listId,
-                        ];
-                        $seenKeys[(string)$listId] = true;
-                    }
-                }
-
-                // Check for special price columns like price_134 (00005)
-                $columns = Schema::getColumnListing('lce_prices');
-                foreach ($columns as $col) {
-                    if (preg_match('/^price_(\d+)$/', $col, $m)) {
-                        $colListId = $m[1];
-                        if (!isset($seenKeys[(string)$colListId])) {
-                            $sample = DB::table('lce_prices')->where('deleted', 'No')->whereNotNull($col)->where($col, '>', 0)->first();
-                            $rate = $sample ? (float)$sample->$col : 0.0;
-                            $label = $colListId == '134' ? "00005 (#134)" : "List #{$colListId} - $" . number_format($rate, 2);
-                            $priceLists[] = [
-                                'value' => (string)$colListId,
-                                'label' => $label,
-                                'rate' => $rate,
-                                'sku' => "LIST_{$colListId}",
-                                'order' => (int)$colListId,
-                            ];
-                            $seenKeys[(string)$colListId] = true;
-                        }
-                    }
-                }
-            }
-
-            // Fallback if empty
-            if (empty($priceLists)) {
-                $priceLists = [
-                    ['value' => '1', 'label' => 'WF1_1+ - $3.09', 'rate' => 3.09, 'sku' => 'WF1_1+', 'order' => 1],
-                    ['value' => '2', 'label' => 'WF2_1+ - $1.99', 'rate' => 1.99, 'sku' => 'WF2_1+', 'order' => 2],
-                    ['value' => '3', 'label' => 'WF3_1+ - $2.79', 'rate' => 2.79, 'sku' => 'WF3_1+', 'order' => 3],
-                    ['value' => '4', 'label' => 'WF4_1+ - $2.29', 'rate' => 2.29, 'sku' => 'WF4_1+', 'order' => 4],
-                    ['value' => '5', 'label' => 'WF5_1+ - $2.19', 'rate' => 2.19, 'sku' => 'WF5_1+', 'order' => 5],
-                    ['value' => '6', 'label' => 'WF6_1+ - $2.09', 'rate' => 2.09, 'sku' => 'WF6_1+', 'order' => 6],
-                    ['value' => '7', 'label' => 'WF7_1+ - $2.39', 'rate' => 2.39, 'sku' => 'WF7_1+', 'order' => 7],
-                    ['value' => '8', 'label' => 'WF8_1+ - $2.49', 'rate' => 2.49, 'sku' => 'WF8_1+', 'order' => 8],
-                    ['value' => '9', 'label' => 'WF9_1+ - $2.59', 'rate' => 2.59, 'sku' => 'WF9_1+', 'order' => 9],
-                    ['value' => '10', 'label' => 'WF10_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF10_1+', 'order' => 10],
-                    ['value' => '11', 'label' => 'WF11_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF11_1+', 'order' => 11],
-                    ['value' => '12', 'label' => 'WF12_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF12_1+', 'order' => 12],
-                    ['value' => '13', 'label' => 'WF13_1+ - $2.99', 'rate' => 2.99, 'sku' => 'WF13_1+', 'order' => 13],
-                    ['value' => '134', 'label' => '00005 (#134)', 'rate' => 0.00, 'sku' => '00005', 'order' => 134],
+            // Ensure price list 21 exists if used
+            if (!isset($seenKeys['21']) && Schema::hasTable('lce_prices')) {
+                $hasCol21 = Schema::hasColumn('lce_prices', 'price_21');
+                $sample21 = $hasCol21 ? DB::table('lce_prices')->where('deleted', 'No')->where('type', 'WF')->whereNotNull('price_21')->first() : null;
+                $rate21 = $sample21 ? (float)$sample21->price_21 : 2.99;
+                $priceLists[] = [
+                    'value' => '21',
+                    'label' => 'WF21_1+ - $2.99',
+                    'rate' => $rate21,
+                    'sku' => 'WF21_1+',
+                    'order' => 21,
                 ];
-            } else {
-                usort($priceLists, function ($a, $b) {
-                    $orderA = $a['order'] ?? (int)$a['value'];
-                    $orderB = $b['order'] ?? (int)$b['value'];
-                    return $orderA <=> $orderB;
-                });
             }
+
+            // Sort: Institutional zone zip lists (ID >= 100) descending (198 down to 132), followed by retail/whls (1, 2, 3)
+            usort($priceLists, function ($a, $b) {
+                $idA = (int)$a['value'];
+                $idB = (int)$b['value'];
+                $isSpecialA = $idA >= 100;
+                $isSpecialB = $idB >= 100;
+                if ($isSpecialA && !$isSpecialB) return -1;
+                if (!$isSpecialA && $isSpecialB) return 1;
+                if ($isSpecialA && $isSpecialB) return $idB <=> $idA;
+                return $idA <=> $idB;
+            });
+
+            return response()->json($priceLists);
 
             return response()->json([
                 'status' => 'success',

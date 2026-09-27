@@ -199,10 +199,10 @@ export const UsersManager: React.FC = () => {
       };
       await adminService.updateRecord('lce_user_info', selectedUser.id, payload);
       setSelectedUser({ ...selectedUser, ...payload });
-      setMessage('Added');
+      setMessage('Profile updated');
     } catch {
       setSelectedUser({ ...selectedUser, ...formData });
-      setMessage('Added');
+      setMessage('Profile updated');
     } finally {
       setSaving(false);
     }

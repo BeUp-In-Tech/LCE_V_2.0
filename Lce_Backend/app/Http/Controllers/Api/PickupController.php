@@ -543,12 +543,12 @@ class PickupController extends Controller
         $weightLbs = (float) $request->weight_lbs;
 
         
-        $priceListId = $user->price_list_id ?? 1;
-        $ratePerLb = $this->pricing->getPrice('WF1', $priceListId)
-            ?? $this->pricing->getWashFoldRate();
-        $minimumLaundryAmount = $this->pricing->getMinimumCharge();
-        $pndFee = $this->pricing->getPickupDeliveryFee();
-        $serviceFee = $this->pricing->getServiceFee();
+        $userZip = $user->zip ?? '';
+        $priceListId = \App\Services\PricingService::getPriceListIdForUser($userZip, $user->price_list_id ?? 21);
+        $ratePerLb = $this->pricing->getWashFoldRate($priceListId);
+        $minimumLaundryAmount = $this->pricing->getMinimumCharge($priceListId);
+        $pndFee = $this->pricing->getPickupDeliveryFee($priceListId);
+        $serviceFee = $this->pricing->getServiceFee($priceListId);
 
         Log::info('PPO Pricing loaded from DB (dynamic)', [
             'rate_per_lb' => $ratePerLb,
@@ -974,8 +974,11 @@ class PickupController extends Controller
             ->where('status', 'active')
             ->exists();
         $waiveFees = $pickup->order_type === 'subscription' || $hasActiveSubscription;
-        $pndFee = $waiveFees ? 0 : (float)$this->pricing->getPickupDeliveryFee();
-        $serviceFee = $waiveFees ? 0 : (float)$this->pricing->getServiceFee();
+        $pickupUser = DB::table('lce_user_info')->where('user_id', $pickup->user_id)->first();
+        $userZip = $pickupUser->zip ?? '';
+        $priceListId = \App\Services\PricingService::getPriceListIdForUser($userZip, $pickupUser->price_list_id ?? 21);
+        $pndFee = $waiveFees ? 0 : (float)$this->pricing->getPickupDeliveryFee($priceListId);
+        $serviceFee = $waiveFees ? 0 : (float)$this->pricing->getServiceFee($priceListId);
 
         
         $orderTotal = round($itemsTotal + $pndFee + $serviceFee, 2);

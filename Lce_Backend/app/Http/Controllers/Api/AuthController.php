@@ -42,7 +42,7 @@ class AuthController extends Controller
             $user->state = $request->state ?? '';
             $user->zip = $request->zip ?? '';
             $user->country = 'US';
-            $user->price_list_id = 1;
+            $user->price_list_id = \App\Services\PricingService::getPriceListIdForUser($request->zip, 21);
             $user->wash_fold_instructions = ' ';
             $user->customer_type = 'Regular';
             $user->custom_minimum_charge = 0.00;
@@ -325,7 +325,7 @@ class AuthController extends Controller
                 $user->state = '';
                 $user->zip = '';
                 $user->country = 'US';
-                $user->price_list_id = 1;
+                $user->price_list_id = 21;
                 $user->wash_fold_instructions = ' ';
                 $user->customer_type = 'Regular';
                 $user->custom_minimum_charge = 0.00;
@@ -436,7 +436,7 @@ class AuthController extends Controller
                     'first_name' => $request->first_name ?? '',
                     'last_name' => $request->last_name ?? '',
                     'country' => 'US',
-                    'price_list_id' => 1,
+                    'price_list_id' => 21,
                     'cdate' => now(),
                     'mdate' => now(),
                 ]);
