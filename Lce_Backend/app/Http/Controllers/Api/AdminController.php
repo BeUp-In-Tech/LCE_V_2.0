@@ -300,7 +300,25 @@ class AdminController extends Controller
         }
 
         try {
+            $columnsRaw = DB::select("SHOW COLUMNS FROM `{$tableName}`");
+            $columnsMeta = [];
+            foreach ($columnsRaw as $col) {
+                $columnsMeta[$col->Field] = $col;
+            }
+
             $input = $request->except(['_token']);
+
+            // Sanitize non-nullable columns where empty strings were converted to null by Laravel middleware
+            foreach ($columnsMeta as $fieldName => $col) {
+                if ($col->Null === 'NO' && array_key_exists($fieldName, $input) && $input[$fieldName] === null) {
+                    if (preg_match('/(int|float|double|decimal)/i', $col->Type)) {
+                        $input[$fieldName] = $col->Default !== null ? $col->Default : 0;
+                    } else {
+                        $input[$fieldName] = $col->Default !== null ? $col->Default : '';
+                    }
+                }
+            }
+
             $id = DB::table($tableName)->insertGetId($input);
 
             return response()->json([
@@ -325,18 +343,31 @@ class AdminController extends Controller
         }
 
         try {
-            // Discover primary key
+            // Discover primary key and column metadata
             $columnsRaw = DB::select("SHOW COLUMNS FROM `{$tableName}`");
             $primaryKey = 'id';
             $validColumns = [];
+            $columnsMeta = [];
             foreach ($columnsRaw as $col) {
                 $validColumns[$col->Field] = true;
+                $columnsMeta[$col->Field] = $col;
                 if ($col->Key === 'PRI') {
                     $primaryKey = $col->Field;
                 }
             }
 
             $input = $request->except(['_token', $primaryKey]);
+
+            // Sanitize non-nullable columns where empty strings were converted to null by Laravel middleware
+            foreach ($columnsMeta as $fieldName => $col) {
+                if ($col->Null === 'NO' && array_key_exists($fieldName, $input) && $input[$fieldName] === null) {
+                    if (preg_match('/(int|float|double|decimal)/i', $col->Type)) {
+                        $input[$fieldName] = $col->Default !== null ? $col->Default : 0;
+                    } else {
+                        $input[$fieldName] = $col->Default !== null ? $col->Default : '';
+                    }
+                }
+            }
 
             // Table-specific column alias mapping for lce_user_info
             if ($tableName === 'lce_user_info') {
