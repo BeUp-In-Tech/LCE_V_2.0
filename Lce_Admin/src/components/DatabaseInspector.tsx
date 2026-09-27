@@ -150,11 +150,10 @@ export const DatabaseInspector: React.FC = () => {
     { label: 'Describe lce_prices', sql: 'DESCRIBE lce_prices;' },
     {
       label: 'Insert GNR Pricing (Template)',
-      sql: `-- Template to insert General (GNR) Fee records into lce_prices:
-INSERT INTO \`lce_prices\` (\`price_list_id\`, \`sku\`, \`price\`, \`type\`, \`status\`) VALUES
-(1, 'GNR_MIN', 20.00, 'GNR', 'active'),
-(1, 'GNR_PD', 3.99, 'GNR', 'active'),
-(1, 'GNR_SVC', 1.50, 'GNR', 'active');`
+      sql: `INSERT INTO \`lce_prices\` (\`sku\`, \`type\`, \`name\`, \`price_1\`, \`deleted\`) VALUES
+('G_MIN', 'GNR', 'GNR Minimum charge', 50.00, 'No'),
+('G_PD', 'GNR', 'GNR Pickup & Delivery', 10.00, 'No'),
+('G_SVC', 'GNR', 'GNR Service Fee', 7.00, 'No');`
     }
   ];
 
