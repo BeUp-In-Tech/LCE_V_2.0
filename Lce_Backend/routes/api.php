@@ -171,3 +171,27 @@ Route::middleware('auth:api')->group(function () {
     Route::get('prices/items', [PriceController::class, 'items']);
     Route::get('processing-sites', [ProcessingSiteController::class, 'index']);
 });
+
+
+/*
+|--------------------------------------------------------------------------
+| Admin Management Routes (Standalone Subdomain / External Admin Access)
+|--------------------------------------------------------------------------
+*/
+use App\Http\Controllers\Api\AdminController;
+use App\Http\Middleware\AdminAuthMiddleware;
+
+Route::prefix('admin')->group(function () {
+    Route::post('login', [AdminController::class, 'login']);
+
+    Route::middleware([AdminAuthMiddleware::class])->group(function () {
+        Route::get('stats', [AdminController::class, 'getStats']);
+        Route::get('tables', [AdminController::class, 'getTables']);
+        Route::get('tables/{tableName}', [AdminController::class, 'getTableData']);
+        Route::post('tables/{tableName}', [AdminController::class, 'createRecord']);
+        Route::put('tables/{tableName}/{id}', [AdminController::class, 'updateRecord']);
+        Route::delete('tables/{tableName}/{id}', [AdminController::class, 'deleteRecord']);
+        Route::post('pickups/{id}/status', [AdminController::class, 'updatePickupStatus']);
+    });
+});
+
