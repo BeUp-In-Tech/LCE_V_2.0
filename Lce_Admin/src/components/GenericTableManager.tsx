@@ -72,6 +72,9 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
     if (tableName.includes('nonworking') || tableName.includes('non_working')) {
       return 'Manage, schedule, and view system closures and calendar exceptions.';
     }
+    if (tableName.includes('plan')) {
+      return 'Define, configure, and manage subscription pricing tiers and package allowances.';
+    }
     if (tableName.includes('subscription')) {
       return `Manage customer ${title.toLowerCase()} and renewal records.`;
     }
@@ -209,6 +212,16 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
       initial['amount'] = 0.0;
       initial['name'] = 'Pickup Payment';
       initial['group_admin_id'] = 0;
+      initial['cdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      initial['mdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    } else if (tableName === 'lce_subscription_plans') {
+      initial['code'] = '';
+      initial['name'] = '';
+      initial['bags_per_month'] = 1;
+      initial['price_per_bag'] = 70.00;
+      initial['billing_cycle'] = 'monthly';
+      initial['annual_discount'] = 15.00;
+      initial['active'] = 1;
       initial['cdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
       initial['mdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
     }
@@ -763,14 +776,23 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                           <option value="subscription">Subscription</option>
                           <option value="PPO">Pay As You Go (PPO)</option>
                         </select>
-                      ) : col.name === 'publish' ? (
+                      ) : col.name === 'publish' || col.name === 'active' ? (
                         <select
                           value={formData[col.name] ?? 1}
                           onChange={(e) => setFormData({ ...formData, [col.name]: Number(e.target.value) })}
                           className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                         >
-                          <option value={1}>Active / Published</option>
-                          <option value={0}>Draft / Inactive</option>
+                          <option value={1}>Active</option>
+                          <option value={0}>Inactive</option>
+                        </select>
+                      ) : col.name === 'billing_cycle' ? (
+                        <select
+                          value={formData[col.name] ?? 'monthly'}
+                          onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="monthly">Monthly</option>
+                          <option value="annual">Annual</option>
                         </select>
                       ) : col.name === 'promocode_for' ? (
                         <select
