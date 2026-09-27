@@ -144,12 +144,17 @@ export const PricingManager: React.FC = () => {
     try {
       if (item.id) {
         const targetKey = getTargetColumnKey(selectedList);
+        const cleanPrice = parseFloat(String(item.price).replace(/[^0-9.]/g, '')) || 0;
         const updatePayload: Record<string, any> = {
-          [targetKey]: item.price,
-          price: item.price,
+          [targetKey]: cleanPrice,
         };
 
         await adminService.updateRecord('lce_prices', item.id, updatePayload);
+
+        // Update local state to show formatted clean number
+        setItems((prev) =>
+          prev.map((i) => (i.id === item.id ? { ...i, price: cleanPrice.toFixed(2) } : i))
+        );
       }
       setMessage(`Price updated for ${item.sku} (${item.name})`);
     } catch {
