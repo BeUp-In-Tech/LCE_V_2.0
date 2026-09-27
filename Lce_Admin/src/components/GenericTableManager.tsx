@@ -170,6 +170,13 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
       initial['promo_expiry_date'] = '2030-12-31';
       initial['promocode_for'] = 'new_customers';
       initial['promocode_description'] = '';
+    } else if (tableName.includes('transaction')) {
+      initial['type'] = 'pickup_charge';
+      initial['amount'] = 0.0;
+      initial['name'] = 'Pickup Payment';
+      initial['group_admin_id'] = 0;
+      initial['cdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      initial['mdate'] = new Date().toISOString().replace('T', ' ').slice(0, 19);
     }
 
     setFormData(initial);
@@ -606,6 +613,32 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                           <option value="percentage">Percentage (%)</option>
                           <option value="amount">Fixed Amount ($)</option>
                         </select>
+                      ) : tableName.includes('transaction') && col.name === 'type' ? (
+                        <select
+                          value={formData[col.name] ?? 'pickup_charge'}
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            const defaultName =
+                              newType === 'subscription'
+                                ? 'Subscription Payment'
+                                : newType === 'credit'
+                                ? 'Credit Payment'
+                                : newType === 'refund'
+                                ? 'Refund Payment'
+                                : 'Pickup Payment';
+                            setFormData({
+                              ...formData,
+                              type: newType,
+                              name: formData['name'] && !formData['name'].includes('Payment') ? formData['name'] : defaultName
+                            });
+                          }}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="pickup_charge">Pickup Charge (pickup_charge)</option>
+                          <option value="subscription">Subscription (subscription)</option>
+                          <option value="credit">Store Credit (credit)</option>
+                          <option value="refund">Refund (refund)</option>
+                        </select>
                       ) : col.name === 'publish' ? (
                         <select
                           value={formData[col.name] ?? 1}
@@ -643,21 +676,21 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                         />
                       ) : (
                         <input
-                          type={col.name === 'promocode_value' ? 'number' : 'text'}
-                          step={col.name === 'promocode_value' ? '0.01' : undefined}
+                          type={col.name === 'promocode_value' || col.name === 'amount' ? 'number' : 'text'}
+                          step={col.name === 'promocode_value' || col.name === 'amount' ? '0.01' : undefined}
                           disabled={isPk}
                           placeholder={
                             col.name === 'area'
                               ? 'Leave blank for All Areas, or enter area code (e.g. SCZ, SBY)'
                               : col.name === 'promocode'
                               ? 'e.g. SUMMER25, FIRST15'
-                              : col.name === 'promocode_value'
-                              ? 'e.g. 15'
+                              : col.name === 'promocode_value' || col.name === 'amount'
+                              ? '0.00'
                               : ''
                           }
                           value={formData[col.name] ?? ''}
                           onChange={(e) => setFormData({ ...formData, [col.name]: e.target.value })}
-                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:opacity-60"
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:opacity-60 font-mono"
                         />
                       )}
 
