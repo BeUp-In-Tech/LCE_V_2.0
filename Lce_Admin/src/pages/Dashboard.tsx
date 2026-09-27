@@ -28,10 +28,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       )}
       {activeTab === 'orders' && <PickupsManager />}
       {activeTab === 'invoices' && (
-        <GenericTableManager title="Invoices" tableName="lce_user_invoice" />
+        <GenericTableManager title="Invoices" tableName="lce_user_invoice" readOnly />
       )}
       {activeTab === 'transactions' && (
-        <GenericTableManager title="Transactions" tableName="lce_user_transactions" />
+        <GenericTableManager title="Transactions" tableName="lce_user_transactions" readOnly />
       )}
       {activeTab === 'promo-codes' && (
         <GenericTableManager title="Promo Codes" tableName="lce_promo_codes" />

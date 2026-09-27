@@ -19,14 +19,20 @@ import {
 interface GenericTableManagerProps {
   title: string;
   tableName: string;
+  readOnly?: boolean;
 }
 
-export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title, tableName }) => {
+export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title, tableName, readOnly }) => {
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<any[]>([]);
   const [primaryKey, setPrimaryKey] = useState<string>('id');
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
+
+  const isReadOnly =
+    Boolean(readOnly) ||
+    tableName === 'lce_user_invoice' ||
+    tableName === 'lce_user_transactions';
 
   // Determine singular label
   const singularLabel = title === 'Invoices'
@@ -299,13 +305,15 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
             <span>Refresh</span>
           </button>
 
-          <button
-            onClick={handleOpenCreate}
-            className="bg-[#5C40E5] hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add {singularLabel}</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleOpenCreate}
+              className="bg-[#5C40E5] hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add {singularLabel}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -392,7 +400,7 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                       </div>
                     </th>
                   ))}
-                  <th className="py-3.5 px-4 text-center w-28 whitespace-nowrap">Actions</th>
+                  {!isReadOnly && <th className="py-3.5 px-4 text-center w-28 whitespace-nowrap">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
@@ -605,24 +613,26 @@ export const GenericTableManager: React.FC<GenericTableManagerProps> = ({ title,
                       })}
 
                       {/* Row Action Buttons */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleOpenEdit(row)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                            title="Edit Record"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteRow(row)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                            title="Delete Record"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+                      {!isReadOnly && (
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center space-x-2">
+                            <button
+                              onClick={() => handleOpenEdit(row)}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                              title="Edit Record"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteRow(row)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                              title="Delete Record"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
