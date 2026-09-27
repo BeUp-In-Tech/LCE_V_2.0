@@ -366,6 +366,8 @@ class AdminController extends Controller
                 if (isset($input['fri']) && isset($validColumns['day_friday'])) {
                     $input['day_friday'] = (int) $input['fri'];
                 }
+            }
+
             // Table-specific sanitization for lce_prices
             if ($tableName === 'lce_prices') {
                 foreach ($input as $k => $v) {
