@@ -17,7 +17,10 @@ import {
   Check,
   Clock,
   Code2,
-  FileCode2
+  FileCode2,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 
 export const DatabaseInspector: React.FC = () => {
@@ -26,6 +29,7 @@ export const DatabaseInspector: React.FC = () => {
 
   // --- SQL Console State ---
   const [sqlQuery, setSqlQuery] = useState<string>('SELECT * FROM lce_prices ORDER BY id DESC LIMIT 50;');
+  const [selectedPreset, setSelectedPreset] = useState<string>('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryResult, setQueryResult] = useState<SqlExecutionResponse | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -38,6 +42,8 @@ export const DatabaseInspector: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Modals & Action States
   const [editRow, setEditRow] = useState<any | null>(null);
@@ -54,7 +60,9 @@ export const DatabaseInspector: React.FC = () => {
   useEffect(() => {
     if (selectedTable && activeTab === 'browser') {
       setPage(1);
-      fetchTableData(selectedTable, 1, search);
+      setSortColumn(null);
+      setSortDirection('asc');
+      fetchTableData(selectedTable, 1, search, null, 'asc');
     }
   }, [selectedTable, activeTab]);
 
@@ -70,16 +78,33 @@ export const DatabaseInspector: React.FC = () => {
     }
   };
 
-  const fetchTableData = async (table: string, p = 1, q = search) => {
+  const fetchTableData = async (
+    table: string,
+    p = 1,
+    q = search,
+    sCol: string | null = sortColumn,
+    sDir: 'asc' | 'desc' = sortDirection
+  ) => {
     setLoading(true);
     try {
-      const res = await adminService.getTableData(table, p, 25, q);
+      const res = await adminService.getTableData(table, p, 25, q, sCol || '', sDir);
       setTableData(res);
     } catch (err: any) {
       console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSort = (columnName: string) => {
+    let nextDir: 'asc' | 'desc' = 'asc';
+    if (sortColumn === columnName) {
+      nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
+    }
+    setSortColumn(columnName);
+    setSortDirection(nextDir);
+    setPage(1);
+    fetchTableData(selectedTable, 1, search, columnName, nextDir);
   };
 
   // --- SQL Execution Handler ---
@@ -161,7 +186,7 @@ export const DatabaseInspector: React.FC = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    fetchTableData(selectedTable, 1, search);
+    fetchTableData(selectedTable, 1, search, sortColumn, sortDirection);
   };
 
   const handleOpenEdit = (row: any) => {
@@ -294,12 +319,13 @@ export const DatabaseInspector: React.FC = () => {
                 <FileCode2 className="w-3.5 h-3.5 text-slate-400" />
                 <span className="text-xs text-slate-400">Presets:</span>
                 <select
+                  value={selectedPreset}
                   onChange={(e) => {
                     if (e.target.value) {
                       setSqlQuery(e.target.value);
+                      setSelectedPreset('');
                     }
                   }}
-                  defaultValue=""
                   className="bg-slate-800 text-slate-200 text-xs border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="" disabled>Select query snippet...</option>
@@ -553,10 +579,24 @@ export const DatabaseInspector: React.FC = () => {
                     <tr>
                       <th className="px-3 py-3 text-center">Actions</th>
                       {tableData.columns.map((col) => (
-                        <th key={col.name} className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center space-x-1">
+                        <th
+                          key={col.name}
+                          onClick={() => handleSort(col.name)}
+                          className="px-4 py-3 whitespace-nowrap cursor-pointer select-none hover:bg-slate-800 transition"
+                          title={`Click to sort by ${col.name}`}
+                        >
+                          <div className="flex items-center space-x-1.5">
                             <span className={col.is_primary ? 'text-amber-400 font-bold' : ''}>{col.name}</span>
                             <span className="text-[10px] text-slate-500 lowercase">({col.type})</span>
+                            {sortColumn === col.name ? (
+                              sortDirection === 'asc' ? (
+                                <ArrowUp className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                              ) : (
+                                <ArrowDown className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                              )
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 text-slate-600 opacity-40 hover:opacity-100 flex-shrink-0" />
+                            )}
                           </div>
                         </th>
                       ))}
@@ -610,14 +650,14 @@ export const DatabaseInspector: React.FC = () => {
                 <div className="flex space-x-2">
                   <button
                     disabled={page <= 1}
-                    onClick={() => { setPage(page - 1); fetchTableData(selectedTable, page - 1, search); }}
+                    onClick={() => { setPage(page - 1); fetchTableData(selectedTable, page - 1, search, sortColumn, sortDirection); }}
                     className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded"
                   >
                     Previous
                   </button>
                   <button
                     disabled={page >= tableData.last_page}
-                    onClick={() => { setPage(page + 1); fetchTableData(selectedTable, page + 1, search); }}
+                    onClick={() => { setPage(page + 1); fetchTableData(selectedTable, page + 1, search, sortColumn, sortDirection); }}
                     className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded"
                   >
                     Next

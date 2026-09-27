@@ -252,7 +252,13 @@ class AdminController extends Controller
             $perPage = min($maxPerPage, max(10, (int)$request->query('per_page', $defaultPerPage)));
 
             $total = $query->count();
-            if ($tableName === 'lce_prices') {
+
+            $sortBy = $request->query('sort_by');
+            $sortDir = strtolower($request->query('sort_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+            if ($sortBy && Schema::hasColumn($tableName, $sortBy)) {
+                $query->orderBy($sortBy, $sortDir);
+            } elseif ($tableName === 'lce_prices') {
                 if (Schema::hasColumn($tableName, 'order')) {
                     $query->orderBy('order', 'asc');
                 }
@@ -684,16 +690,16 @@ class AdminController extends Controller
 
         try {
             $startTime = microtime(true);
-            $upper = strtoupper(ltrim($rawSql));
 
-            // Check if query is read-only / tabular
-            if (
-                str_starts_with($upper, 'SELECT') ||
-                str_starts_with($upper, 'SHOW') ||
-                str_starts_with($upper, 'DESC') ||
-                str_starts_with($upper, 'DESCRIBE') ||
-                str_starts_with($upper, 'EXPLAIN')
-            ) {
+            // Strip multi-line comments /* ... */ and leading single-line comments (-- or #) to inspect first token
+            $cleanedSql = preg_replace('/\/\*.*?\*\//s', '', $rawSql);
+            $cleanedSql = preg_replace('/^(\s*(--[^\r\n]*|#[^\r\n]*)\s*)+/m', '', $cleanedSql);
+            $cleanedSql = trim($cleanedSql);
+
+            // Check if query is read-only / tabular (SELECT, SHOW, DESC, DESCRIBE, EXPLAIN, WITH)
+            $isSelect = (bool) preg_match('/^\s*(SELECT|SHOW|DESC|DESCRIBE|EXPLAIN|WITH)\b/i', $cleanedSql);
+
+            if ($isSelect) {
                 $results = DB::select($rawSql);
                 $duration = round((microtime(true) - $startTime) * 1000, 2);
 
@@ -714,9 +720,10 @@ class AdminController extends Controller
             }
 
             // Mutation or DDL query (INSERT, UPDATE, DELETE, ALTER, etc.)
-            // Split by semicolon if multiple statements
+            // Split by semicolon outside quotes
+            $pattern = '/;(?=(?:[^\'"`]*(?:\'[^\']*\'|"[^"]*"|`[^`]*`))*[^\'"`]*$)/';
             $statements = array_filter(
-                array_map('trim', explode(';', $rawSql)),
+                array_map('trim', preg_split($pattern, $rawSql)),
                 fn($stmt) => !empty($stmt)
             );
 

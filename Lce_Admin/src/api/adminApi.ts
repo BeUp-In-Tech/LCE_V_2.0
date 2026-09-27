@@ -111,10 +111,20 @@ export const adminService = {
     }
   },
 
-  getTableData: async (tableName: string, page = 1, perPage = 25, search = ''): Promise<TableDataResponse> => {
-    const res = await adminApi.get(`/tables/${tableName}`, {
-      params: { page, per_page: perPage, search },
-    });
+  getTableData: async (
+    tableName: string,
+    page = 1,
+    perPage = 25,
+    search = '',
+    sortBy = '',
+    sortDir: 'asc' | 'desc' = 'asc'
+  ): Promise<TableDataResponse> => {
+    const params: Record<string, any> = { page, per_page: perPage, search };
+    if (sortBy) {
+      params.sort_by = sortBy;
+      params.sort_dir = sortDir;
+    }
+    const res = await adminApi.get(`/tables/${tableName}`, { params });
     return res.data;
   },
 
