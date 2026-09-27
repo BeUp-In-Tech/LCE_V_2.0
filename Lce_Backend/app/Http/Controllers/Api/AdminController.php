@@ -246,8 +246,9 @@ class AdminController extends Controller
 
             // Pagination
             $page = max(1, (int)$request->query('page', 1));
-            $defaultPerPage = $tableName === 'lce_prices' ? 200 : 25;
-            $maxPerPage = $tableName === 'lce_prices' ? 500 : 100;
+            $isBulkTable = in_array($tableName, ['lce_prices', 'lce_pickup_zones', 'lce_zones', 'lce_pickup_nonworking_days']);
+            $defaultPerPage = $isBulkTable ? 200 : 25;
+            $maxPerPage = $isBulkTable ? 500 : 100;
             $perPage = min($maxPerPage, max(10, (int)$request->query('per_page', $defaultPerPage)));
 
             $total = $query->count();
@@ -345,6 +346,25 @@ class AdminController extends Controller
                 }
                 if (isset($input['apt_unit']) && isset($validColumns['address_2'])) {
                     $input['address_2'] = $input['apt_unit'];
+                }
+            }
+
+            // Table-specific column alias mapping for lce_pickup_zones
+            if (in_array($tableName, ['lce_pickup_zones', 'lce_zones'])) {
+                if (isset($input['mon']) && isset($validColumns['day_monday'])) {
+                    $input['day_monday'] = (int) $input['mon'];
+                }
+                if (isset($input['tue']) && isset($validColumns['day_tuesday'])) {
+                    $input['day_tuesday'] = (int) $input['tue'];
+                }
+                if (isset($input['wed']) && isset($validColumns['day_wednesday'])) {
+                    $input['day_wednesday'] = (int) $input['wed'];
+                }
+                if (isset($input['thu']) && isset($validColumns['day_thursday'])) {
+                    $input['day_thursday'] = (int) $input['thu'];
+                }
+                if (isset($input['fri']) && isset($validColumns['day_friday'])) {
+                    $input['day_friday'] = (int) $input['fri'];
                 }
             }
 

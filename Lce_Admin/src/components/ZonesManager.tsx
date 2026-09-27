@@ -41,11 +41,11 @@ export const ZonesManager: React.FC = () => {
 
   const fetchZones = async () => {
     setLoading(true);
-    const tableCandidates = ['lce_zones', 'lce_pickup_zones', 'lce_zipcodes', 'lce_zipcode_rules'];
+    const tableCandidates = ['lce_pickup_zones', 'lce_zones', 'lce_zipcodes', 'lce_zipcode_rules'];
     
     for (const tName of tableCandidates) {
       try {
-        const res = await adminService.getTableData(tName, 1, 100, search);
+        const res = await adminService.getTableData(tName, 1, 200, search);
         if (res.data && res.data.length > 0) {
           setActiveTableName(tName);
           const mapped = res.data.map((row: any) => ({
@@ -53,11 +53,11 @@ export const ZonesManager: React.FC = () => {
             zip: row.zip || row.zipcode || row.zip_code || '00000',
             city: row.city || row.name || 'City',
             state: row.state || 'CA',
-            mon: row.mon === 1 || row.monday === 1 || row.mon === true || true,
-            tue: row.tue === 1 || row.tuesday === 1 || row.tue === true || true,
-            wed: row.wed === 1 || row.wednesday === 1 || row.wed === true || true,
-            thu: row.thu === 1 || row.thursday === 1 || row.thu === true || true,
-            fri: row.fri === 1 || row.friday === 1 || row.fri === true || true,
+            mon: Boolean(row.day_monday === 1 || row.day_monday === '1' || row.monday === 1 || row.mon === 1),
+            tue: Boolean(row.day_tuesday === 1 || row.day_tuesday === '1' || row.tuesday === 1 || row.tue === 1),
+            wed: Boolean(row.day_wednesday === 1 || row.day_wednesday === '1' || row.wednesday === 1 || row.wed === 1),
+            thu: Boolean(row.day_thursday === 1 || row.day_thursday === '1' || row.thursday === 1 || row.thu === 1),
+            fri: Boolean(row.day_friday === 1 || row.day_friday === '1' || row.friday === 1 || row.fri === 1),
             area: row.area || row.route || 'SBY',
           }));
           setZones(mapped);
@@ -98,6 +98,11 @@ export const ZonesManager: React.FC = () => {
       zip: zone.zip,
       city: zone.city,
       state: zone.state,
+      day_monday: zone.mon ? 1 : 0,
+      day_tuesday: zone.tue ? 1 : 0,
+      day_wednesday: zone.wed ? 1 : 0,
+      day_thursday: zone.thu ? 1 : 0,
+      day_friday: zone.fri ? 1 : 0,
       mon: zone.mon ? 1 : 0,
       tue: zone.tue ? 1 : 0,
       wed: zone.wed ? 1 : 0,
@@ -108,7 +113,7 @@ export const ZonesManager: React.FC = () => {
 
     try {
       await adminService.updateRecord(activeTableName, zone.id, payload);
-      setMessage(`Pickup Zone #${zone.id} (${zone.city}) updated`);
+      setMessage(`Pickup Zone #${zone.id} (${zone.city}) updated successfully`);
     } catch {
       setMessage(`Pickup Zone #${zone.id} saved`);
     } finally {
