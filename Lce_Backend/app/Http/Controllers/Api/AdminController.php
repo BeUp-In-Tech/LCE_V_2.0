@@ -497,16 +497,24 @@ class AdminController extends Controller
         ]);
 
         try {
+            $status = strtolower(trim($request->status));
+            $updateData = [
+                'status' => $status,
+            ];
+
+            if ($status === 'cancelled') {
+                $updateData['cancelled_time'] = now();
+            } elseif (in_array($status, ['delivered', 'completed'])) {
+                $updateData['delivery_time'] = now();
+            }
+
             DB::table('lce_user_pickup')
-                ->where('pickup_id', $id)
-                ->update([
-                    'status' => $request->status,
-                    'updated_at' => now()
-                ]);
+                ->where('id', $id)
+                ->update($updateData);
 
             return response()->json([
                 'status' => 'success',
-                'message' => "Pickup #{$id} status updated to {$request->status}."
+                'message' => "Pickup #{$id} status updated to {$status}."
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
