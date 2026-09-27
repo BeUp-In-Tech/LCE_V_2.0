@@ -164,11 +164,21 @@ class AdminController extends Controller
         }
     }
 
+    private function resolveTableName(string $tableName): string
+    {
+        if ($tableName === 'lce_non_working_days' && !Schema::hasTable('lce_non_working_days') && Schema::hasTable('lce_pickup_nonworking_days')) {
+            return 'lce_pickup_nonworking_days';
+        }
+        return $tableName;
+    }
+
     /**
      * Get table schema and paginated rows
      */
     public function getTableData(Request $request, $tableName)
     {
+        $tableName = $this->resolveTableName($tableName);
+
         if (!Schema::hasTable($tableName)) {
             return response()->json(['error' => "Table '{$tableName}' does not exist."], 404);
         }
@@ -274,6 +284,8 @@ class AdminController extends Controller
      */
     public function createRecord(Request $request, $tableName)
     {
+        $tableName = $this->resolveTableName($tableName);
+
         if (!Schema::hasTable($tableName)) {
             return response()->json(['error' => "Table '{$tableName}' does not exist."], 404);
         }
@@ -297,6 +309,8 @@ class AdminController extends Controller
      */
     public function updateRecord(Request $request, $tableName, $id)
     {
+        $tableName = $this->resolveTableName($tableName);
+
         if (!Schema::hasTable($tableName)) {
             return response()->json(['error' => "Table '{$tableName}' does not exist."], 404);
         }
@@ -360,6 +374,8 @@ class AdminController extends Controller
      */
     public function deleteRecord(Request $request, $tableName, $id)
     {
+        $tableName = $this->resolveTableName($tableName);
+
         if (!Schema::hasTable($tableName)) {
             return response()->json(['error' => "Table '{$tableName}' does not exist."], 404);
         }

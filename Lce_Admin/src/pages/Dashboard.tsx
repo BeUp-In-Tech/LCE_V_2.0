@@ -38,7 +38,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       )}
       {activeTab === 'zones' && <ZonesManager />}
       {activeTab === 'non-working-days' && (
-        <GenericTableManager title="Non-Working Days" tableName="lce_non_working_days" />
+        <GenericTableManager title="Non-Working Days" tableName="lce_pickup_nonworking_days" />
       )}
       {activeTab === 'pricing' && <PricingManager />}
       {activeTab === 'sql-tool' && <DatabaseInspector />}
