@@ -584,8 +584,6 @@ class AdminController extends Controller
                 return $idA <=> $idB;
             });
 
-            return response()->json($priceLists);
-
             return response()->json([
                 'status' => 'success',
                 'data' => $priceLists,

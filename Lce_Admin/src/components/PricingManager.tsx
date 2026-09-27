@@ -21,11 +21,22 @@ export const PricingManager: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string>('All Types');
   const [savingSku, setSavingSku] = useState<string | null>(null);
 
-  // Dynamically populated from lce_prices table schema and rows
+  // Dynamically populated from lce_prices_lists table
   const [availableLists, setAvailableLists] = useState<{ key: string; label: string }[]>([
-    { key: 'price_1', label: 'Retail (#1)' },
-    { key: 'price_2', label: 'Wholesale (#2)' },
+    { key: 'price_198', label: '00014 (#198)' },
+    { key: 'price_197', label: '00013 (#197)' },
+    { key: 'price_195', label: '00012 (#195)' },
+    { key: 'price_194', label: '00002 (#194)' },
+    { key: 'price_192', label: '00011 (#192)' },
+    { key: 'price_189', label: '00009 (#189)' },
+    { key: 'price_159', label: '99993 (#159)' },
+    { key: 'price_142', label: '99992 (#142)' },
+    { key: 'price_141', label: '99991 (#141)' },
     { key: 'price_134', label: '00005 (#134)' },
+    { key: 'price_132', label: '00003 (#132)' },
+    { key: 'price_1', label: 'Retail (#1)' },
+    { key: 'price_2', label: 'SCZ WHLS (#2)' },
+    { key: 'price_3', label: 'SBY WHLS (#3)' },
   ]);
   const [availableTypes, setAvailableTypes] = useState<string[]>([
     'All Types', 'GNR', 'WF', 'WFU', 'WFS', 'DS', 'HD', 'DC'
@@ -34,9 +45,8 @@ export const PricingManager: React.FC = () => {
   const getTargetColumnKey = (listName: string): string => {
     const found = availableLists.find(l => l.label === listName);
     if (found) return found.key;
-    if (listName.includes('#134')) return 'price_134';
-    if (listName.includes('#2')) return 'price_2';
-    if (listName.includes('#3')) return 'price_3';
+    const match = listName.match(/#(\d+)/);
+    if (match) return `price_${match[1]}`;
     return 'price_1';
   };
 

@@ -99,7 +99,10 @@ export const adminService = {
   getPriceLists: async (): Promise<{ value: string; label: string; rate?: number; sku?: string }[]> => {
     try {
       const res = await adminApi.get('/price-lists');
-      if (res.data && res.data.data) {
+      if (Array.isArray(res.data)) {
+        return res.data;
+      }
+      if (res.data && Array.isArray(res.data.data)) {
         return res.data.data;
       }
       return [];
